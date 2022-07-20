@@ -378,8 +378,19 @@ struct obj *otmp;
             seemimic(mtmp);
         /* format monster's name before altering its visibility */
         Strcpy(nambuf, Monnam(mtmp));
-        mon_set_minvis(mtmp);
-        if (!oldinvis && knowninvisible(mtmp)) {
+        if (!otmp->cursed)
+            mon_set_minvis(mtmp);
+
+        if (oldinvis && otmp->cursed) {
+            mtmp->minvis = 0;
+            if (!Blind) {
+                pline("%s becomes visible!", nambuf);
+                learn_it = TRUE;
+            }
+        } else if (!oldinvis && otmp->cursed) {
+            if (!Blind)
+                pline("%s briefly fades from view.", nambuf);
+        } else if (!oldinvis && knowninvisible(mtmp)) {
             pline("%s turns transparent!", nambuf);
             reveal_invis = TRUE;
             learn_it = TRUE;
@@ -478,14 +489,14 @@ struct obj *otmp;
             wake = FALSE;
             if (canseemon(mtmp))
                 pline("%s is no longer ill.", Monnam(mtmp));
-            mtmp->msick = 0;
-            if ((mtmp->mtame || mtmp->mpeaceful) && mtmp->msick > 0) {
+            if (mtmp->mtame || mtmp->mpeaceful) {
                 if (Role_if(PM_HEALER)) {
                     adjalign(1);
                 } else if (!mtmp->mtame) {
                     adjalign(sgn(u.ualign.type));
                 }
             }
+            mtmp->msick = 0;
         } else if (is_zombie(mtmp->data)) {
             if (!DEADMONSTER(mtmp)) {
                 dmg = d(1, 8);
@@ -675,7 +686,7 @@ struct monst *mon;
 xchar *xp, *yp;
 int locflags; /* non-zero means get location even if monster is buried */
 {
-    if (mon == &youmonst) {
+    if (mon == &youmonst || (u.usteed && mon == u.usteed)) {
         *xp = u.ux;
         *yp = u.uy;
         return TRUE;
@@ -696,16 +707,18 @@ struct obj *obj;
 coord *cc;
 boolean adjacentok; /* False: at obj's spot only, True: nearby is allowed */
 {
-    struct monst *mtmp, *mtmp2 = has_omonst(obj) ? get_mtraits(obj, TRUE) : 0;
+    struct monst *mtmp = (struct monst *) 0,
+                 *mtmp2 = has_omonst(obj) ? get_mtraits(obj, TRUE) : 0;
 
     if (mtmp2) {
         /* save_mtraits() validated mtmp2->mnum */
         mtmp2->data = &mons[mtmp2->mnum];
-        if (mtmp2->mhpmax <= 0 && !is_rider(mtmp2->data))
-            return (struct monst *) 0;
-        mtmp = makemon(mtmp2->data, cc->x, cc->y,
-                       (NO_MINVENT | MM_NOWAIT | MM_NOCOUNTBIRTH | MM_REVIVE
-                        | (adjacentok ? MM_ADJACENTOK : 0)));
+
+        if (mtmp2->mhpmax > 0 || is_rider(mtmp2->data)) {
+            mtmp = makemon(mtmp2->data, cc->x, cc->y,
+                           (NO_MINVENT | MM_NOWAIT | MM_NOCOUNTBIRTH | MM_REVIVE
+                            | (adjacentok ? MM_ADJACENTOK : 0)));
+        }
         if (!mtmp) {
             /* mtmp2 is a copy of obj's object->oextra->omonst extension
                and is not on the map or on any monst lists */
@@ -894,7 +907,10 @@ boolean by_hero;
             break; /* x,y are 0 */
         }
     }
-    if (!x || !y
+    if (x) /* update corpse's location now that we're sure where it is */
+        corpse->ox = x, corpse->oy = y;
+
+    if (!x
         /* Rules for revival from containers:
          *  - the container cannot be locked
          *  - the container cannot be heavily nested (>2 is arbitrary)
@@ -903,15 +919,10 @@ boolean by_hero;
          */
         || (container && (container->olocked || container_nesting > 2
                           || container->otyp == STATUE
-                          || (container->otyp == BAG_OF_HOLDING && rn2(40)))))
+                          || (container->otyp == BAG_OF_HOLDING && rn2(40))))
+        /* if buried zombie cannot dig itself out, do not revive */
+        || (is_zomb && corpse->where == OBJ_BURIED && !zombie_can_dig(x, y)))
         return (struct monst *) 0;
-
-    /* buried zombie cannot dig itself out, do not revive */
-    if (is_zomb && corpse->where == OBJ_BURIED && !zombie_can_dig(x, y))
-        return (struct monst *) 0;
-
-    /* record the object's location now that we're sure where it is */
-    corpse->ox = x, corpse->oy = y;
 
     /* prepare for the monster */
     montype = corpse->corpsenm;
@@ -1069,7 +1080,7 @@ boolean by_hero;
         /* not useupf(), which charges */
         if (corpse->quan > 1L)
             corpse = splitobj(corpse, 1L);
-        delobj(corpse);
+        delobj_core(corpse, TRUE);
         newsym(x, y);
         break;
     case OBJ_MINVENT:
@@ -2691,13 +2702,31 @@ boolean ordinary;
             You_feel("rather itchy under %s.", yname(uarmc));
             break;
         }
-	/* wand and potion now only do temporary invis,
-	 * to make the cloak and ring more useful */
-        incr_itimeout(&HInvis, d(1 + obj->spe, 250));
-        if (msg) {
+        if (!EInvis && (HInvis & TIMEOUT) && obj->cursed) {
+            You("become visible.");
+            HInvis = (HInvis & ~TIMEOUT);
             learn_it = TRUE;
             newsym(u.ux, u.uy);
-            self_invis_message();
+            if (rn2(2)) {
+                pline("For some reason, you feel your presence is known.");
+                aggravate();
+            }
+        } else {
+            if (obj->cursed) {
+                if (!Blind)
+                    You("fade from view for a brief moment.");
+                else
+                    You_feel("an odd sensation for a brief moment.");
+            } else {
+	        /* wand and potion now only do temporary invis,
+	         * to make the cloak and ring more useful */
+                incr_itimeout(&HInvis, d(1 + obj->spe, 250));
+                if (msg) {
+                    learn_it = TRUE;
+                    newsym(u.ux, u.uy);
+                    self_invis_message();
+                }
+            }
         }
         break;
     }
@@ -3210,7 +3239,7 @@ boolean youattack, allow_cancel_kill, self_cancel;
 
                 if (otmp->blessed && !otmp->oartifact
                     && !obj_resists(otmp, 0, 0) && !rn2(5)) {
-                    Your("%s!", aobjnam(otmp, "resist"));
+                    pline("%s!", Yobjnam2(otmp, "resist"));
                     continue;
                 }
                 if (((otmp->oartifact && spec_ability(otmp, SPFX_INTEL))
@@ -4975,7 +5004,7 @@ boolean say; /* Announce out of sight hit/miss events if true */
             boolean fireball;
 
  make_bounce:
-            bchance = (levl[sx][sy].typ == STONE) ? 10
+            bchance = (!isok(sx, sy) || levl[sx][sy].typ == STONE) ? 10
                 : (In_mines(&u.uz) && IS_WALL(levl[sx][sy].typ)) ? 20
                 : 75;
             bounce = 0;
@@ -5078,6 +5107,8 @@ const char *msg;
         lev->icedpool = 0;
     }
     spot_stop_timers(x, y, MELT_ICE_AWAY); /* no more ice to melt away */
+    if (t_at(x, y))
+        trap_ice_effects(x, y, TRUE); /* TRUE because ice_is_melting */
     obj_ice_effects(x, y, FALSE);
     if (!(lev->typ == PUDDLE || lev->typ == SEWAGE))
         unearth_objs(x, y);
@@ -5247,7 +5278,7 @@ boolean moncast;
                 You_hear("hissing gas.");
             }
             rangemod -= 3;
-            lev->typ = ROOM;
+            lev->typ = ROOM, lev->flags = 0;
             if (lev->typ == ROOM) {
                 if ((mon = m_at(x, y)) != 0) {
                     if (is_swimmer(mon->data) && mon->mundetected) {
@@ -5403,13 +5434,21 @@ boolean moncast;
 
     /* set up zap text for possible door feedback; for exploding wand, we
        want "the blast" rather than "your blast" even if hero caused it */
-    yourzap = (type >= 0 && !exploding_wand_typ);
+    yourzap = (type >= 0 && !exploding_wand_typ && !moncast);
     zapverb = "blast"; /* breath attack or wand explosion */
     if (!exploding_wand_typ) {
         if (abs(type) < ZT_SPELL(0))
             zapverb = "bolt"; /* wand zap */
         else if (abs(type) < ZT_BREATH(0))
             zapverb = "spell";
+    } else if (exploding_wand_typ == POT_OIL
+               || exploding_wand_typ == SCR_FIRE) {
+        /* breakobj() -> explode_oil() -> splatter_burning_oil()
+           -> explode(ZT_SPELL(ZT_FIRE), BURNING_OIL)
+           -> zap_over_floor(ZT_SPELL(ZT_FIRE), POT_OIL) */
+        /* leave zapverb as "blast"; exploding_wand_typ was nonzero, so
+           'yourzap' is FALSE and the result will be "the blast" */
+        exploding_wand_typ = 0; /* not actually an exploding wand */
     }
 
     /* secret door gets revealed, converted into regular door */

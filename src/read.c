@@ -756,7 +756,7 @@ struct monst *mtmp;
                 if (is_on)
                     Ring_gone(obj);
                 s = rnd(3 * abs(obj->spe)); /* amount of damage */
-                useup(obj);
+                useup(obj), obj = 0;
                 losehp(Maybe_Half_Phys(s), "exploding ring", KILLED_BY_AN);
             } else {
                 if (canseemon(mtmp))
@@ -1097,7 +1097,6 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
         register schar s;
         boolean special_armor;
         boolean same_color;
-        boolean draconic = (uarmc && Is_dragon_scales(uarmc));
 
         if (already_known) {
             if (u.usteed
@@ -1115,14 +1114,100 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
                     pline("You cannot enchant armor that is not worn.");
                     otmp = getobj(clothes, "enchant");
                 }
+                /* Dragon scales that are worn over body armor will cause the armor to
+                 * become scaled */
+                if (otmp && Is_dragon_scales(otmp)) { /* guarantees that worn cloak is scales,
+                                                         but does NOT guarantee existence of uarm */
+                    /* no body armor under the scales = the scales are enchanted
+                     * directly onto you (no such thing as a scaled shirt). The wearer
+                     * will polymorph. Also caused by a confused scroll, _after_ the
+                     * scales meld. */
+                    boolean poly_after_merge = (!uarm || confused);
+                    int old_light = artifact_light(otmp) ? arti_light_radius(otmp) : 0;
+                    if (uarm) {
+                        struct obj *scales = uarmc;
+                        struct obj *armor = uarm;
+
+                        pline("%s hardens and melds into your %s%s", Yname2(scales),
+                              suit_simple_name(armor),
+                              Is_dragon_scaled_armor(armor) ? "." : "!");
+
+                        if (Is_dragon_scaled_armor(armor)) {
+                            if (Dragon_armor_to_scales(armor) == scales->otyp) {
+                                /* scales match armor already; just use up scales */
+                                pline("Its scales still seem %s.",
+                                      dragon_scales_color(armor));
+                            } else {
+                                /* armor is already scaled but the new scales are
+                                 * different and will replace the old ones */
+                                pline("Its scales change from %s to %s!",
+                                      dragon_scales_color(armor),
+                                      dragon_scales_color(scales));
+                                /* remove properties of old scales */
+                                dragon_armor_handling(armor, FALSE);
+                            }
+                        }
+                        setnotworn(armor);
+                        /* don't allow a suit of armor with an object property
+                           to co-exist with merged dragon scales */
+                        if ((armor->oprops & ITEM_PROP_MASK) != 0) {
+                            oprops_off(armor, W_ARM);
+                            armor->oprops &= ~(ITEM_PROP_MASK);
+                        }
+                        armor->dragonscales = scales->otyp;
+                        armor->cursed = 0;
+                        if (sblessed) {
+                            armor->oeroded = armor->oeroded2 = 0;
+                            armor->blessed = 1;
+                        }
+                        setworn(armor, W_ARM);
+                        check_wings(TRUE);
+                        dragon_armor_handling(armor, TRUE);
+                        known = TRUE;
+                        if (otmp->unpaid)
+                            alter_cost(otmp, 0L); /* shop bill */
+
+                        /* handle gold/chromatic dragon-scaled armor... */
+                        if (scales->lamplit) {
+                            if (armor->lamplit) {
+                                /* if melding lit dragon scales onto already lit dragon-scaled
+                                   armor, avoid attaching a duplicate light source to the armor.
+                                   useup() won't take care of this, because it calls
+                                   setnotworn(), which will make artifact_light() return
+                                   false, so the regular check for deleting the light source
+                                   when an object is deallocated will do nothing */
+                                del_light_source(LS_OBJECT, obj_to_any(scales));
+                            } else {
+                                /* this will set armor->lamplit */
+                                obj_move_light_source(scales, armor);
+                            }
+                            /* may be different radius depending on BUC of armor */
+                            maybe_adjust_light(armor, old_light);
+                        } else if (armor->lamplit) {
+                            /* scales not lit but armor is: melding non-gold scales onto
+                               gold/chromatic-scaled armor, which will no longer be a
+                               light source */
+                            end_burn(armor, FALSE);
+                        }
+                        useup(scales);
+                    }
+                    if (poly_after_merge) {
+                        polyself(4);
+                        /* adjust duration for scroll beatitude - a blessed scroll will
+                         * give you more time as a dragon, a cursed scroll less */
+                        u.mtimedone = (u.mtimedone * (bcsign(sobj) + 2) / 2);
+                    }
+                    if (!scursed || !uarm) {
+                        break;
+                    } else {
+                        /* continue with regular cursed-enchant logic on the resulting
+                         * armor piece */
+                        otmp = uarm;
+                    }
+                }
             }
         } else {
             otmp = some_armor(&youmonst);
-        }
-        if (draconic) {
-            /* if player is trying to enchant scales onto armor, override random
-             * armor selection */
-            otmp = uarmc;
         }
         if (!otmp) {
             strange_feeling(sobj, !Blind
@@ -1133,7 +1218,7 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
             exercise(A_STR, !scursed);
             break;
         }
-        if (confused && !draconic) {
+        if (confused) {
             old_erodeproof = (otmp->oerodeproof != 0);
             new_erodeproof = !scursed;
             otmp->oerodeproof = 0; /* for messages */
@@ -1175,101 +1260,9 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
 
         /* KMH -- catch underflow */
         s = scursed ? -otmp->spe : otmp->spe;
-
-        /* Dragon scales that are worn over body armor will cause the armor to
-         * become scaled. */
-        if (draconic) { /* guarantees that worn cloak is scales, but does NOT
-                           guarantee existence of uarm */
-            /* no body armor under the scales = the scales are enchanted
-             * directly onto you (no such thing as a scaled shirt). The wearer
-             * will polymorph. Also caused by a confused scroll, _after_ the
-             * scales meld. */
-            boolean poly_after_merge = (!uarm || confused);
-            int old_light = artifact_light(otmp) ? arti_light_radius(otmp) : 0;
-            if (uarm) {
-                struct obj *scales = uarmc;
-                struct obj *armor = uarm;
-
-                pline("%s hardens and melds into your %s%s", Yname2(scales),
-                      suit_simple_name(armor),
-                      Is_dragon_scaled_armor(armor) ? "." : "!");
-
-                if (Is_dragon_scaled_armor(armor)) {
-                    if (Dragon_armor_to_scales(armor) == scales->otyp) {
-                        /* scales match armor already; just use up scales */
-                        pline("Its scales still seem %s.",
-                              dragon_scales_color(armor));
-                    } else {
-                        /* armor is already scaled but the new scales are
-                         * different and will replace the old ones */
-                        pline("Its scales change from %s to %s!",
-                              dragon_scales_color(armor),
-                              dragon_scales_color(scales));
-                        /* remove properties of old scales */
-                        dragon_armor_handling(armor, FALSE);
-                    }
-                }
-                setnotworn(armor);
-                /* don't allow a suit of armor with an object property
-                   to co-exist with merged dragon scales */
-                if ((armor->oprops & ITEM_PROP_MASK) != 0) {
-                    oprops_off(armor, W_ARM);
-                    armor->oprops &= ~(ITEM_PROP_MASK);
-                }
-                armor->dragonscales = scales->otyp;
-                armor->cursed = 0;
-                if (sblessed) {
-                    armor->oeroded = armor->oeroded2 = 0;
-                    armor->blessed = 1;
-                }
-                setworn(armor, W_ARM);
-                check_wings(TRUE);
-                dragon_armor_handling(armor, TRUE);
-                known = TRUE;
-                if (otmp->unpaid)
-                    alter_cost(otmp, 0L); /* shop bill */
-
-                /* handle gold/chromatic dragon-scaled armor... */
-                if (scales->lamplit) {
-                    if (armor->lamplit) {
-                        /* if melding lit dragon scales onto already lit dragon-scaled
-                           armor, avoid attaching a duplicate light source to the armor.
-                           useup() won't take care of this, because it calls
-                           setnotworn(), which will make artifact_light() return
-                           false, so the regular check for deleting the light source
-                           when an object is deallocated will do nothing */
-                        del_light_source(LS_OBJECT, obj_to_any(scales));
-                    } else {
-                        /* this will set armor->lamplit */
-                        obj_move_light_source(scales, armor);
-                    }
-                    /* may be different radius depending on BUC of armor */
-                    maybe_adjust_light(armor, old_light);
-                } else if (armor->lamplit) {
-                    /* scales not lit but armor is: melding non-gold scales onto
-                       gold/chromatic-scaled armor, which will no longer be a
-                       light source */
-                    end_burn(armor, FALSE);
-                }
-                useup(scales);
-            }
-            if (poly_after_merge) {
-                polyself(4);
-                /* adjust duration for scroll beatitude - a blessed scroll will
-                 * give you more time as a dragon, a cursed scroll less */
-                u.mtimedone = (u.mtimedone * (bcsign(sobj) + 2) / 2);
-            }
-            if (!scursed || !uarm) {
-                break;
-            } else {
-                /* continue with regular cursed-enchant logic on the resulting
-                 * armor piece */
-                otmp = uarm;
-            }
-        }
         if (s > (special_armor ? 5 : 3) && rn2(s)) {
             otmp->in_use = TRUE;
-            if ((otmp == uarmg) && uarmg->oartifact == ART_HAND_OF_VECNA) {
+            if ((otmp == uarmg) && otmp->oartifact == ART_HAND_OF_VECNA) {
                 /* The Hand of Vecna is 'merged' with the wearer,
                    it can't be destroyed this way */
                 pline("%s violently %s%s%s for a while, but nothing else happens.",
@@ -1287,13 +1280,13 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
                       otense(otmp, "evaporate"));
             }
             if (carried(otmp)) {
-                if ((otmp == uarmg) && uarmg->oartifact == ART_HAND_OF_VECNA) {
-                    ; /* nothing happens if worn */
+                if ((otmp == uarmg) && otmp->oartifact == ART_HAND_OF_VECNA) {
+                    otmp->in_use = FALSE; /* nothing happens if worn */
                 } else {
                     remove_worn_item(otmp, FALSE);
                     useup(otmp);
                 }
-            } else {
+            } else if (mcarried(otmp)) {
                 /* steed barding */
                 m_useup(otmp->ocarry, otmp);
             }
@@ -1806,7 +1799,7 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
         break;
     case SCR_AMNESIA:
         known = TRUE;
-        if (!Upolyd && Race_if(PM_ILLITHID)) {
+        if (is_illithid(youmonst.data)) {
             Your("psionic abilities ward off the scroll's magic.");
             break;
         } else {
@@ -1874,7 +1867,9 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
                 burn_away_slime();
             }
         }
-        explode(cc.x, cc.y, 11, dam, SCROLL_CLASS, EXPL_FIERY);
+#define ZT_SPELL_O_FIRE 11 /* explained in splatter_burning_oil(explode.c) */
+        explode(cc.x, cc.y, ZT_SPELL_O_FIRE, dam, SCROLL_CLASS, EXPL_FIERY);
+#undef ZT_SPELL_O_FIRE
         break;
     }
     case SCR_EARTH:
@@ -2580,14 +2575,23 @@ int how;
                 pline_The("voice of Vecna fills your mind:");
                 verbalize("Thou shalt do no harm to %s whilst I exist!",
                           makeplural(buf));
-                /* the dark magic causes the scroll to burn */
-                pline("A dark magic catches the scroll on fire and you burn your %s.",
-                      makeplural(body_part(HAND)));
-                if (how_resistant(FIRE_RES) == 100) {
-                    shieldeff(u.ux, u.uy);
-                    monstseesu(M_SEEN_FIRE);
-                } else {
-                    losehp(rnd(3), "burning scroll of genocide", KILLED_BY_AN);
+                if (how & ONTHRONE) { /* dark magic causes the throne to burn you */
+                    pline_The("throne glows white hot!");
+                    if (how_resistant(FIRE_RES) == 100) {
+                        shieldeff(u.ux, u.uy);
+                        monstseesu(M_SEEN_FIRE);
+                    } else {
+                        losehp(rnd(3), "sitting on a searing hot throne", KILLED_BY);
+                    }
+                } else { /* the dark magic causes the scroll to burn */
+                    pline("A dark magic catches the scroll on fire and you burn your %s.",
+                          makeplural(body_part(HAND)));
+                    if (how_resistant(FIRE_RES) == 100) {
+                        shieldeff(u.ux, u.uy);
+                        monstseesu(M_SEEN_FIRE);
+                    } else {
+                        losehp(rnd(3), "burning scroll of genocide", KILLED_BY_AN);
+                    }
                 }
                 return;
             }
@@ -2774,7 +2778,8 @@ struct obj *sobj;
 void
 unpunish()
 {
-    struct obj *savechain = uchain;
+    struct obj *savechain = uchain,
+               *saveball = uball;
 
     /* chain goes away */
     obj_extract_self(uchain);
@@ -2782,9 +2787,20 @@ unpunish()
     newsym(uchain->ox, uchain->oy);
     setworn((struct obj *) 0, W_CHAIN); /* sets 'uchain' to Null */
     dealloc_obj(savechain);
-    /* ball persists */
+    /* the chain is gone but the no longer attached ball persists */
     uball->spe = 0;
     setworn((struct obj *) 0, W_BALL); /* sets 'uball' to Null */
+    if (saveball->where == OBJ_FLOOR
+        && is_open_air(saveball->ox, saveball->oy)) {
+        /* pick up the ball and drop it, so it can fall through the air */
+        obj_extract_self(saveball);
+        if (!flooreffects(saveball, saveball->ox, saveball->oy, "drop")) {
+            place_object(saveball, saveball->ox, saveball->oy);
+        } else {
+            maybe_unhide_at(saveball->ox, saveball->oy);
+            newsym(saveball->ox, saveball->oy);
+        }
+    }
 }
 
 /* some creatures have special data structures that only make sense in their
@@ -2835,9 +2851,9 @@ create_particular_parse(str, d)
 char *str;
 struct _create_particular_data *d;
 {
-    char *bufp = str;
+    char *rbufp = (char *) 0, *bufp = str;
     char *tmpp;
-    int i, attempts, adjlen = 0;
+    int i, race = NON_PM;
 
     d->monclass = MAXMCLASSES;
     d->which = urole.malenum; /* an arbitrary index into mons[] */
@@ -2901,11 +2917,11 @@ struct _create_particular_data *d;
     /* determine if a race was specified for the resulting mon
        TODO?: currently limited only to player-valid races. */
     for (i = 0; races[i].adj; i++) {
-        adjlen = strlen(races[i].adj);
+        int adjlen = strlen(races[i].adj);
         if (!strncmpi(bufp, races[i].adj, adjlen)
-            && *(bufp + adjlen) == ' ') {
-            bufp += adjlen + 1;
-            d->race = races[i].malenum;
+            && !strncmpi(bufp + adjlen, " race ", 6)) {
+            rbufp = bufp + adjlen + 6;
+            race = races[i].malenum;
             break;
         }
     }
@@ -2915,17 +2931,15 @@ struct _create_particular_data *d;
         return TRUE;
     }
 
-    attempts = (d->race != NON_PM) ? 2 : 1;
-
-    for (i = 0; i < attempts; i++) {
-        if (i == 1) {
-            bufp -= (adjlen + 1);
-            d->race = NON_PM;
-        }
-        d->which = name_to_mon(bufp);
-        if (d->which >= LOW_PM)
-            return TRUE; /* got one */
+    if (race != NON_PM && (d->which = name_to_mon(rbufp)) >= LOW_PM) {
+        d->race = race;
+        return TRUE;
     }
+
+    d->which = name_to_mon(bufp);
+    if (d->which >= LOW_PM)
+        return TRUE; /* got one */
+
     d->monclass = name_to_monclass(bufp, &d->which);
 
     if (d->which >= LOW_PM) {

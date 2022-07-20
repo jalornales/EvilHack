@@ -966,12 +966,16 @@ struct obj *obj;
     obj->where = OBJ_INVENT;
 
     /* fill empty quiver if obj was thrown */
-    if (flags.pickup_thrown && !uquiver && obj_was_thrown
+    if (obj_was_thrown && flags.pickup_thrown && !uquiver
         /* if Mjollnir or Xiuhcoatl is thrown and fails to return,
            we want to auto-pick it when we move to its spot, but not
-           into quiver; aklyses behave like these artifactswhen thrown
-           while wielded, but we lack sufficient information here make
-           them exceptions */
+           into quiver because it needs to be wielded to be re-thrown;
+           aklys likewise because player using 'f' to throw it might
+           not notice that it isn't wielded until it fails to return
+           several times; we never auto-wield, just omit from quiver
+           so that player will be prompted for what to throw and
+           possibly realize that re-wielding is necessary */
+        && obj->otyp != AKLYS
         && obj->oartifact != ART_MJOLLNIR
         && obj->oartifact != ART_XIUHCOATL
         && (throwing_weapon(obj) || is_ammo(obj)))
@@ -1210,14 +1214,24 @@ int x, y;
     }
 }
 
-/* destroy object in fobj chain (if unpaid, it remains on the bill) */
+/* normal object deletion (if unpaid, it remains on the bill) */
 void
 delobj(obj)
-register struct obj *obj;
+struct obj *obj;
+{
+    delobj_core(obj, FALSE);
+}
+
+/* destroy object; caller has control over whether to destroy something
+   that ordinarily shouldn't be destroyed */
+void
+delobj_core(obj, force)
+struct obj *obj;
+boolean force; /* 'force==TRUE' used when reviving Rider corpses */
 {
     boolean update_map;
 
-    if (obj_resists(obj, 0, 0)) {
+    if (!force && obj_resists(obj, 0, 0)) {
         /* player might be doing something stupid, but we
          * can't guarantee that.  assume special artifacts
          * are indestructible via drawbridges, and exploding
@@ -1227,7 +1241,7 @@ register struct obj *obj;
     }
     update_map = (obj->where == OBJ_FLOOR);
     obj_extract_self(obj);
-    if (update_map) {
+    if (update_map) { /* floor object's coordinates are always up to date */
         maybe_unhide_at(obj->ox, obj->oy);
         newsym(obj->ox, obj->oy);
     }
@@ -2452,7 +2466,7 @@ learn_unseen_invent()
 void
 update_inventory()
 {
-    if (restoring)
+    if (program_state.saving || program_state.restoring)
         return;
 
     /*

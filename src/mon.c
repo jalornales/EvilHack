@@ -331,7 +331,6 @@ struct monst* mdef;
         /* don't continue if failed to turn into a mind flayer (extinct?) */
         mdef->mcanmove = 1;
         mdef->mfrozen = 0;
-        mdef->mtame = mdef->mpeaceful = 0;
         set_malign(mdef);
 
         /* clear other data structures tracking shk information */
@@ -343,13 +342,16 @@ struct monst* mdef;
          * if present */
         char name[PL_PSIZ];
         name[0] = '\0';
-        if (has_eshk(mdef) && !Hallucination) {
-            Strcpy(name, shkname(mdef));
-        } else if (has_mname(mdef)) {
-            Strcpy(name, MNAME(mdef));
+        if (has_eshk(mdef)) {
+            if (!Hallucination)
+                Strcpy(name, shkname(mdef));
+            free_eshk(mdef);
         }
+        if (has_epri(mdef))
+            free_epri(mdef);
+        if (has_egd(mdef))
+            free_egd(mdef);
 
-        dealloc_mextra(mdef);
         if (name[0] != '\0') {
             christen_monst(mdef, name);
         }
@@ -781,7 +783,7 @@ int
 minliquid(mtmp)
 register struct monst *mtmp;
 {
-    boolean inpool, inlava, infountain, inshallow, inforge, invladcavern;
+    boolean inpool, inlava, infountain, inshallow, inforge, inopenair;
 
     /* [ceiling clingers are handled below] */
     inpool = (is_pool(mtmp->mx, mtmp->my)
@@ -794,10 +796,10 @@ register struct monst *mtmp;
     inforge = IS_FORGE(levl[mtmp->mx][mtmp->my].typ);
     inshallow = ((is_puddle(mtmp->mx, mtmp->my) || is_sewage(mtmp->mx, mtmp->my))
                  && !(is_flyer(mtmp->data) || is_floater(mtmp->data)));
-    invladcavern = (IS_AIR(levl[mtmp->mx][mtmp->my].typ) && In_V_tower(&u.uz)
-                    && !(is_flyer(mtmp->data) || is_floater(mtmp->data)
-                         || is_clinger(mtmp->data)
-                         || ((mtmp == u.usteed) && Flying)));
+    inopenair = (is_open_air(mtmp->mx, mtmp->my)
+                 && !(is_flyer(mtmp->data) || is_floater(mtmp->data)
+                      || is_clinger(mtmp->data)
+                      || ((mtmp == u.usteed) && Flying)));
 
     /* Flying and levitation keeps our steed out of the liquid
        (but not water-walking or swimming; note: if hero is in a
@@ -921,7 +923,7 @@ register struct monst *mtmp;
             }
             return 1;
         }
-    } else if (invladcavern) {
+    } else if (inopenair) {
         if (cansee(mtmp->mx, mtmp->my)) {
             pline("%s plummets several thousand feet to %s death.",
                   Monnam(mtmp), mhis(mtmp));
@@ -1415,7 +1417,7 @@ int
 meatmetal(mtmp)
 register struct monst *mtmp;
 {
-    register struct obj *otmp;
+    register struct obj *otmp, *otmp2, *ncobj;
     struct permonst *ptr;
     int poly, grow, heal, mstone;
 
@@ -1458,6 +1460,16 @@ register struct monst *mtmp;
                     mtmp->mhp += objects[otmp->otyp].oc_weight;
                     if (mtmp->mhp > mtmp->mhpmax)
                         mtmp->mhp = mtmp->mhpmax;
+                }
+                if (Has_contents(otmp)) {
+                    if (cansee(mtmp->mx, mtmp->my))
+                        pline("Its contents fall out.");
+                    for (otmp2 = otmp->cobj; otmp2; otmp2 = ncobj) {
+                        ncobj = otmp2->nobj;
+                        obj_extract_self(otmp2);
+                        if (!flooreffects(otmp2, mtmp->mx, mtmp->my, ""))
+                            place_object(otmp2, mtmp->mx, mtmp->my);
+                    }
                 }
                 if (otmp == uball) {
                     unpunish();
@@ -1534,6 +1546,8 @@ struct monst *mtmp;
                    /* don't engulf boulders and statues or ball&chain */
                    || otmp->oclass == ROCK_CLASS
                    || otmp == uball || otmp == uchain
+                   /* leave sokoban prizes alone */
+                   || is_soko_prize_flag(otmp)
                    /* normally mtmp won't have stepped onto scare monster
                       scroll, but if it does, don't eat or engulf that
                       (note: scrolls inside eaten containers will still
@@ -1992,6 +2006,9 @@ struct monst *mtmp;
     if (racial_giant(mtmp) || racial_centaur(mtmp))
         maxcarrcap += 400;
 
+    if (racial_tortle(mtmp))
+        maxcarrcap += 200;
+
     /* Base monster carrying capacity is equal to human maximum
      * carrying capacity, or half human maximum if not strong.
      * (for a polymorphed player, the value used would be the
@@ -2261,7 +2278,7 @@ long flag;
                         && !m_at(nx, ny) && (nx != u.ux || ny != u.uy))))
                 continue;
             /* avoid open air if gravity is in effect */
-            if (IS_AIR(ntyp) && In_V_tower(&u.uz)
+            if (is_open_air(nx, ny)
                 && !(is_flyer(mdat) || is_floater(mdat)
                      || is_clinger(mdat)))
                 continue;
@@ -2574,17 +2591,8 @@ struct monst *magr, /* monster that is currently deciding where to move */
     if (is_berserker(ma) && m_canseeu(magr)
         && magr->mpeaceful == FALSE && !rn2(7)
         && (magr->mhp < (magr->mhpmax / 5))
-        && !noattacks(ma)) {
-        if (ma->mlet == S_HUMAN || ma->mlet == S_ORC
-            || ma->mlet == S_GIANT || ma->mlet == S_OGRE) {
-            if (cansee(magr->mx, magr->my))
-                pline("%s flies into a berserker rage!", Monnam(magr));
-            else if (!Deaf)
-                pline("%s %s with rage!", Amonnam(magr),
-                      rn2(2) ? "roars" : "howls");
-        }
+        && !noattacks(ma))
         return ALLOW_M | ALLOW_TM;
-    }
 
     /* The Riders, and huge/gigantic monsters
        will step on the bugs to get to you */
@@ -3028,6 +3036,7 @@ cerberusdead()
 {
     if (!u.uevent.ucerberus)
         u.uevent.ucerberus = TRUE;
+    com_pager(304);
 }
 
 void
@@ -3035,6 +3044,15 @@ vecnadead()
 {
     if (!u.uevent.uvecna)
         u.uevent.uvecna = TRUE;
+    com_pager(303);
+}
+
+void
+goblinkingdead()
+{
+    if (!u.uevent.ugking)
+        u.uevent.ugking = TRUE;
+    com_pager(305);
 }
 
 void
@@ -3277,6 +3295,8 @@ register struct monst *mtmp;
         cerberusdead();
     if (mtmp->isvecna)
         vecnadead();
+    if (mtmp->isgking)
+        goblinkingdead();
     if (tmp == urole.neminum)
         nemdead();
     if (mtmp->data->msound == MS_LEADER)
@@ -3288,12 +3308,15 @@ register struct monst *mtmp;
     if (mtmp->data == &mons[PM_MEDUSA] && !u.uachieve.killed_medusa) {
         u.uachieve.killed_medusa = 1;
         livelog_write_string(LL_ACHIEVE | LL_UMONST, "killed Medusa");
-    } else if (mtmp->data == &mons[PM_CERBERUS] && !u.uachieve.killed_cerberus) {
+    } else if (mtmp->iscerberus && !u.uachieve.killed_cerberus) {
         u.uachieve.killed_cerberus = 1;
         livelog_write_string(LL_ACHIEVE | LL_UMONST, "killed Cerberus");
-    } else if (mtmp->data == &mons[PM_VECNA] && !u.uachieve.killed_vecna) {
+    } else if (mtmp->isvecna && !u.uachieve.killed_vecna) {
         u.uachieve.killed_vecna = 1;
         livelog_write_string(LL_ACHIEVE | LL_UMONST, "destroyed Vecna");
+    } else if (mtmp->isgking && !u.uachieve.killed_gking) {
+        u.uachieve.killed_gking = 1;
+        livelog_write_string(LL_ACHIEVE | LL_UMONST, "killed the Goblin King");
     } else if (mtmp->data == &mons[PM_DEATH]) {
         switch (mvitals[tmp].died) {
         case 1:
@@ -3400,7 +3423,7 @@ boolean was_swallowed; /* digestion */
     }
 
     /* Corpses don't hover in midair in the presence of gravity */
-    if (IS_AIR(levl[mon->mx][mon->my].typ) && In_V_tower(&u.uz)) {
+    if (is_open_air(mon->mx, mon->my)) {
         if (cansee(mon->mx, mon->my) && !no_corpse(mdat))
             pline("%s corpse falls away and disappears.", s_suffix(Monnam(mon)));
         return FALSE;
@@ -3445,7 +3468,7 @@ boolean was_swallowed; /* digestion */
     /* must duplicate this below check in xkilled() since it results in
      * creating no objects as well as no corpse
      */
-    if (LEVEL_SPECIFIC_NOCORPSE(mdat))
+    if (LEVEL_SPECIFIC_NOCORPSE(mdat) && !mon->isvecna)
         return FALSE;
 
     if (((r_bigmonst(mon) || mdat == &mons[PM_LIZARD]) && !mon->mcloned)
@@ -3774,7 +3797,8 @@ int xkill_flags; /* 1: suppress message, 2: suppress corpse, 4: pacifist */
         goto cleanup;
     }
 
-    if (nocorpse || LEVEL_SPECIFIC_NOCORPSE(mdat))
+    if (nocorpse
+        || (LEVEL_SPECIFIC_NOCORPSE(mdat) && !mtmp->isvecna))
         goto cleanup;
 
 #ifdef MAIL
@@ -3866,8 +3890,7 @@ int xkill_flags; /* 1: suppress message, 2: suppress corpse, 4: pacifist */
 
     /* adjust alignment points */
     if (mtmp->m_id == quest_status.leader_m_id) { /* REAL BAD! */
-        if (mtmp->m_id == quest_status.leader_m_id)
-            quest_status.leader_is_dead = TRUE;
+        quest_status.leader_is_dead = TRUE;
         if (u.ualign.type != A_NONE) {
             if (canspotmon(mtmp))
                 You_feel("very guilty.");
@@ -4678,7 +4701,7 @@ struct monst *mon;
 {
     int mcham;
 
-    if (Protection_from_shape_changers || mon->mcan) {
+    if ((Protection_from_shape_changers || mon->mcan) && !mon->mtame) {
         mcham = (int) mon->cham;
         if (mcham >= LOW_PM) {
             mon->cham = NON_PM;
@@ -4894,8 +4917,7 @@ int shiftflags;
                 dochng = FALSE;
             else if (mon->mhp >= 9 * mon->mhpmax / 10 && !rn2(6)
                 && (!canseemon(mon)
-                    || distu(mon->mx, mon->my) > BOLT_LIM * BOLT_LIM)
-                && !tame_vamp)
+                    || distu(mon->mx, mon->my) > BOLT_LIM * BOLT_LIM))
                 dochng = TRUE; /* 'ptr' stays Null */
         }
     }

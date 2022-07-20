@@ -217,10 +217,10 @@ struct trobj Tinningkit[] = { { TINNING_KIT, UNDEF_SPE, TOOL_CLASS, 1, 0 },
                                      { 0, 0, 0, 0, 0 } };
 struct trobj Pickaxe[] = { { PICK_AXE, 0, TOOL_CLASS, 1, 0 },
                                   { 0, 0, 0, 0, 0 } };
-struct trobj Psionics[] = { { SPE_PSIONIC_WAVE, 0, SPBOOK_CLASS, 1, 0 },
-                                   { 0, 0, 0, 0, 0 } };
 struct trobj AoMR[] = { { AMULET_OF_MAGIC_RESISTANCE, 0, AMULET_CLASS, 1, 0 },
                                { 0, 0, 0, 0, 0 } };
+struct trobj Oilskin[] = { { OILSKIN_SACK, 0, TOOL_CLASS, 1, 0 },
+                                  { 0, 0, 0, 0, 0 } };
 
 /* race-based substitutions for initial inventory;
    the weaker cloak for elven rangers is intentional--they shoot better */
@@ -664,46 +664,6 @@ register char sym;
             knows_object(ct);
 }
 
-int attk_melee_types [] =
-    { AT_CLAW, AT_BITE, AT_KICK, AT_BUTT, AT_TUCH,
-      AT_STNG, AT_TENT, AT_WEAP
-    };
-
-int attk_spec_types [] =
-    { AT_HUGS, AT_SPIT, AT_ENGL, AT_BREA, AT_GAZE,
-      AT_MAGC
-    };
-
-int damg_melee_types [] =
-    { AD_PHYS, AD_FIRE, AD_COLD, AD_SLEE, AD_ELEC,
-      AD_ELEC, AD_DRST, AD_ACID, AD_STUN, AD_SLOW,
-      AD_PLYS, AD_DRLI, AD_DREN, AD_LEGS, AD_STCK,
-      AD_SGLD, AD_SITM, AD_SEDU, AD_TLPT, AD_RUST,
-      AD_CONF, AD_DRDX, AD_DRCO, AD_DRIN, AD_DISE,
-      AD_DCAY, AD_HALU, AD_ENCH, AD_CORR, AD_BHED,
-      AD_POLY, AD_WTHR, AD_PITS, AD_WEBS
-    };
-
-int damg_breath_types [] =
-    { AD_MAGM, AD_FIRE, AD_COLD, AD_SLEE, AD_ELEC,
-      AD_DRST, AD_WATR, AD_ACID
-    };
-
-int damg_spit_types [] =
-    { AD_BLND, AD_ACID, AD_DRST };
-
-int damg_gaze_types [] =
-    { AD_FIRE, AD_COLD, AD_SLEE, AD_STUN, AD_SLOW,
-      AD_CNCL
-    };
-
-int damg_engulf_types [] =
-    { AD_PLYS, AD_DGST, AD_WRAP };
-
-int damg_magic_types [] =
-    { AD_SPEL, AD_CLRC, AD_MAGM, AD_FIRE, AD_COLD,
-      AD_ACID };
-
 void
 u_init()
 {
@@ -843,7 +803,7 @@ u_init()
     case PM_CONVICT:
         ini_inv(Convict);
         if (Race_if(PM_ILLITHID))
-            ini_inv(Psionics);
+            force_learn_spell(SPE_PSIONIC_WAVE);
         knows_object(SKELETON_KEY);
         knows_object(GRAPPLING_HOOK);
         skill_init(Skill_Con);
@@ -855,7 +815,7 @@ u_init()
         u.umoney0 = rn1(1000, 1001);
         ini_inv(Healer);
         if (Race_if(PM_ILLITHID))
-            ini_inv(Psionics);
+            force_learn_spell(SPE_PSIONIC_WAVE);
         if (!rn2(25))
             ini_inv(Lamp);
         knows_object(POT_FULL_HEALING);
@@ -865,7 +825,7 @@ u_init()
         u.umoney0 = rn1(251, 250);
         ini_inv(Infidel);
         if (Race_if(PM_ILLITHID))
-            ini_inv(Psionics);
+            force_learn_spell(SPE_PSIONIC_WAVE);
         knows_object(SCR_CHARGING);
         if (Race_if(PM_GIANT)) {
             struct trobj RandomGem = Gem[0];
@@ -888,7 +848,7 @@ u_init()
         skill_init(Skill_K);
         break;
     case PM_MONK: {
-        static short M_spell[] = { SPE_HEALING, SPE_PROTECTION, SPE_SLEEP };
+        static short M_spell[] = { SPE_HEALING, SPE_PROTECTION, SPE_CONFUSE_MONSTER };
 
         Monk[M_BOOK].trotyp = M_spell[rn2(90) / 30]; /* [0..2] */
         ini_inv(Monk);
@@ -903,7 +863,7 @@ u_init()
     case PM_PRIEST:
         ini_inv(Priest);
         if (Race_if(PM_ILLITHID))
-            ini_inv(Psionics);
+            force_learn_spell(SPE_PSIONIC_WAVE);
         if (!rn2(4))
             ini_inv(Lamp);
         knows_object(POT_WATER);
@@ -995,7 +955,7 @@ u_init()
         if (Race_if(PM_GIANT) || Race_if(PM_TORTLE))
             ini_inv(AoMR);
         if (Race_if(PM_ILLITHID))
-            ini_inv(Psionics);
+            force_learn_spell(SPE_PSIONIC_WAVE);
         if (!rn2(5))
             ini_inv(Lamp);
         if (!rn2(5))
@@ -1064,7 +1024,7 @@ u_init()
 
         if (!Role_if(PM_ARCHEOLOGIST) && !Role_if(PM_CONVICT)) {
             if (!rn2(4)) {
-                /* Wise dwarves bring their toy to the dungeons. */
+                /* Wise dwarves bring their toy to the dungeons */
                 ini_inv(Pickaxe);
             }
         }
@@ -1081,6 +1041,11 @@ u_init()
             P_MAX_SKILL(P_TRIDENT) = P_EXPERT;
         if (Role_if(PM_HEALER) || Role_if(PM_TOURIST))
             P_MAX_SKILL(P_TRIDENT) = P_SKILLED;
+
+        if (!rn2(4)) {
+            /* in case they want to go for a swim */
+            ini_inv(Oilskin);
+        }
         break;
 
     case PM_GIANT:
@@ -1220,6 +1185,58 @@ u_init()
     return;
 }
 
+/* attack/damage structs for shambler_init() */
+int attk_melee_types [] =
+    { AT_CLAW, AT_BITE, AT_TUCH, AT_STNG, AT_WEAP };
+
+int attk_spec_types [] =
+    { AT_HUGS, AT_SPIT, AT_ENGL, AT_BREA, AT_GAZE,
+      AT_MAGC, AT_KICK, AT_BUTT, AT_TENT
+    };
+
+int damg_melee_types [] =
+    { AD_PHYS, AD_FIRE, AD_COLD, AD_SLEE, AD_ELEC,
+      AD_ELEC, AD_DRST, AD_ACID, AD_STUN, AD_SLOW,
+      AD_PLYS, AD_DRLI, AD_DREN, AD_LEGS, AD_STCK,
+      AD_SGLD, AD_SITM, AD_SEDU, AD_TLPT, AD_RUST,
+      AD_CONF, AD_DRDX, AD_DRCO, AD_DRIN, AD_DISE,
+      AD_DCAY, AD_HALU, AD_ENCH, AD_CORR, AD_BHED,
+      AD_POLY, AD_WTHR, AD_PITS, AD_WEBS
+    };
+
+int damg_breath_types [] =
+    { AD_MAGM, AD_FIRE, AD_COLD, AD_SLEE, AD_ELEC,
+      AD_DRST, AD_WATR, AD_ACID
+    };
+
+int damg_spit_types [] =
+    { AD_BLND, AD_ACID, AD_DRST };
+
+int damg_gaze_types [] =
+    { AD_FIRE, AD_COLD, AD_SLEE, AD_STUN, AD_SLOW,
+      AD_CNCL
+    };
+
+int damg_engulf_types [] =
+    { AD_PLYS, AD_DGST, AD_WRAP };
+
+int damg_magic_types [] =
+    { AD_SPEL, AD_CLRC, AD_MAGM, AD_FIRE, AD_COLD,
+      AD_ACID
+    };
+
+int damg_kick_types [] =
+    { AD_PHYS, AD_STUN, AD_LEGS, AD_ENCH, AD_CLOB };
+
+int damg_butt_types [] =
+    { AD_PHYS, AD_STUN, AD_CONF, AD_CLOB };
+
+int damg_tent_types [] =
+    { AD_PHYS, AD_DRST, AD_ACID, AD_STUN, AD_PLYS,
+      AD_DRLI, AD_DREN, AD_CONF, AD_DRIN, AD_DISE,
+      AD_HALU
+    };
+
 void
 shambler_init()
 {
@@ -1240,8 +1257,8 @@ shambler_init()
         attkptr = &shambler->mattk[i];
         attkptr->aatyp = attk_melee_types[rn2(SIZE(attk_melee_types))];
         attkptr->adtyp = damg_melee_types[rn2(SIZE(damg_melee_types))];
-        attkptr->damn = 2 + rn2(4);
-        attkptr->damd = 6 + rn2(3);
+        attkptr->damn = 2 + rn2(5);
+        attkptr->damd = 3 + rn2(6);
     }
 
     shambler_attacks = shambler_attacks + (rnd(9) / 3) - 1;
@@ -1265,6 +1282,15 @@ shambler_init()
             break;
         case AT_MAGC:
             attkptr->adtyp = damg_magic_types[rn2(SIZE(damg_magic_types))];
+            break;
+        case AT_KICK:
+            attkptr->adtyp = damg_kick_types[rn2(SIZE(damg_kick_types))];
+            break;
+        case AT_BUTT:
+            attkptr->adtyp = damg_butt_types[rn2(SIZE(damg_butt_types))];
+            break;
+        case AT_TENT:
+            attkptr->adtyp = damg_tent_types[rn2(SIZE(damg_tent_types))];
             break;
         case AT_HUGS:
             attkptr->adtyp = AD_PHYS;

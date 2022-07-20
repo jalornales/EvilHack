@@ -522,7 +522,7 @@ int *dmg_p; /* for dishing out extra damage in lieu of Int loss */
             pline("%s brain is unharmed.",
                   (mdef == &youmonst) ? "Your" : s_suffix(Monnam(mdef)));
         return MM_MISS; /* side-effects can't occur */
-    } else if (is_illithid(pd)) {
+    } else if (racial_illithid(mdef)) {
         if (visflag)
             pline("%s psionic abilities shield %s brain.",
                   (mdef == &youmonst) ? "Your" : s_suffix(Monnam(mdef)),
@@ -530,7 +530,7 @@ int *dmg_p; /* for dishing out extra damage in lieu of Int loss */
         return MM_MISS; /* side-effects can't occur */
     } else if (magr == &youmonst) {
         You("eat %s brain!", s_suffix(mon_nam(mdef)));
-    } else if (mdef == &youmonst && !Race_if(PM_ILLITHID)) {
+    } else if (mdef == &youmonst) {
         Your("brain is eaten!");
     } else { /* monster against monster */
         if (visflag && canspotmon(mdef))
@@ -1906,6 +1906,8 @@ struct obj *otmp;
         pline("This tastes just like chicken!");
     } else if (mnum == PM_FLOATING_EYE && u.umonnum == PM_RAVEN) {
         You("peck the eyeball with delight.");
+    } else if (tp) {
+        ; /* we've already delivered a message; don't add "it tastes okay" */
     } else {
         /* yummy is always False for omnivores, palatable always True */
         boolean yummy = (vegan(&mons[mnum])
@@ -2380,6 +2382,19 @@ eatspecial()
         exercise(A_CON, TRUE);
     }
 
+    if (otmp->oartifact == ART_HAND_OF_VECNA) {
+        You("feel a burning deep inside your %s!", body_part(STOMACH));
+        if (otmp->cursed)
+            u.uhp -= rn1(150, 250);
+        else
+            u.uhp -= rn1(50, 150);
+        if (u.uhp <= 0) {
+            killer.format = KILLED_BY;
+            Strcpy(killer.name, "eating the Hand of Vecna");
+            done(DIED);
+        }
+    }
+
     if (otmp == uwep && otmp->quan == 1L)
         uwepgone();
     if (otmp == uquiver && otmp->quan == 1L)
@@ -2741,7 +2756,10 @@ doeat()
     } else if ((otmp->owornmask & (W_ARMOR | W_TOOL | W_AMUL | W_SADDLE))
                != 0) {
         /* let them eat rings */
-        You_cant("eat %s you're wearing.", something);
+        if (otmp->oartifact == ART_HAND_OF_VECNA)
+            You_cant("eat %s that's a part of you!", something);
+        else
+            You_cant("eat %s you're wearing.", something);
         return 0;
     } else if (!(carried(otmp) ? retouch_object(&otmp, FALSE)
                                : touch_artifact(otmp, &youmonst))) {

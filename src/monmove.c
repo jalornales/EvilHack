@@ -147,17 +147,17 @@ struct monst *mtmp;
 {
     /* creatures who are directly resistant to magical scaring:
      * Rodney, lawful minions, Angels, Archangels, the Riders,
-     * Vecna, monster players, demon lords and princes, honey badgers,
-     * shopkeepers inside their own shop, anything that is mindless,
-     * priests inside their own temple, the quest leaders and nemesis,
-     * neothelids
+     * Vecna, the Goblin King, monster players, demon lords and princes,
+     * honey badgers, shopkeepers inside their own shop, anything that
+     * is mindless, priests inside their own temple, the quest leaders
+     * and nemesis, neothelids
      */
     if (mtmp->iswiz || is_lminion(mtmp) || mtmp->data == &mons[PM_ANGEL]
         || mtmp->data == &mons[PM_ARCHANGEL] || mtmp->data == &mons[PM_HONEY_BADGER]
         || mtmp->data == &mons[PM_NEOTHELID] || mindless(mtmp->data)
         || is_mplayer(mtmp->data) || is_rider(mtmp->data) || mtmp->isvecna
         || mtmp->data->mlet == S_HUMAN || unique_corpstat(mtmp->data)
-        || (mtmp->isshk && inhishop(mtmp))
+        || (mtmp->isshk && inhishop(mtmp)) || mtmp->isgking
         || (mtmp->ispriest && inhistemple(mtmp)))
         return FALSE;
 
@@ -564,7 +564,7 @@ register struct monst *mtmp;
         mon_adjust_speed(mtmp, 3, (struct obj *) 0);
 
     /* being in midair where gravity is still in effect can be lethal */
-    if (IS_AIR(levl[mtmp->mx][mtmp->my].typ) && In_V_tower(&u.uz)
+    if (is_open_air(mtmp->mx, mtmp->my)
         && !(is_flyer(mdat) || is_floater(mdat)
              || is_clinger(mdat) || ((mtmp == u.usteed) && Flying))) {
         if (canseemon(mtmp))
@@ -1260,7 +1260,7 @@ register int after;
    /* does this monster like to play keep-away? */
     if (is_skittish(ptr)
         && (dist2(omx, omy, gx, gy) < 10))
-	appr = -1;
+        appr = -1;
     if (mtmp->mconf || (u.uswallow && mtmp == u.ustuck)) {
         appr = 0;
     } else {
@@ -1276,6 +1276,12 @@ register int after;
             || (mtmp->mpeaceful && !mtmp->isshk) /* allow shks to follow */
             || ((monsndx(ptr) == PM_STALKER || ptr->mlet == S_BAT
                  || ptr->mlet == S_LIGHT) && !rn2(3)))
+            appr = 0;
+
+        /* unintelligent monsters won't realize hiding tortle is a creature
+         * from far away, and even intelligent monsters may overlook it
+         * occasionally */
+        if ((Hidinshell && (is_animal(ptr) || mindless(ptr) || !rn2(6))))
             appr = 0;
 
         if (monsndx(ptr) == PM_LEPRECHAUN && (appr == 1)
@@ -1385,7 +1391,7 @@ register int after;
 
                     /* if open air and can't fly/float and gravity
                        is in effect */
-                    if (IS_AIR(levl[xx][yy].typ) && In_V_tower(&u.uz)
+                    if (is_open_air(xx, yy)
                         && !(is_flyer(ptr) || is_floater(ptr)
                              || is_clinger(ptr)))
                         continue;
@@ -2150,7 +2156,8 @@ can_fog(mtmp)
 struct monst *mtmp;
 {
     if (!(mvitals[PM_FOG_CLOUD].mvflags & G_GENOD) && is_vampshifter(mtmp)
-        && !Protection_from_shape_changers && !stuff_prevents_passage(mtmp))
+        && !Protection_from_shape_changers && !stuff_prevents_passage(mtmp)
+        && !mtmp->mtame)
         return TRUE;
     return FALSE;
 }

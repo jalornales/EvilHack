@@ -142,6 +142,8 @@ const char *goal;
             visctrl(Cmd.spkeys[NHKF_GETPOS_MOVESKIP]),
             fastmovemode[!iflags.getloc_moveskip]);
     putstr(tmpwin, 0, sbuf);
+    if (goal && !strcmp(goal, "a monster"))
+        goto skip_non_mons;
     if (!iflags.terrainmode || (iflags.terrainmode & TER_DETECT) == 0) {
         Sprintf(sbuf, "Use '%s' to toggle menu listing for possible targets.",
                 visctrl(Cmd.spkeys[NHKF_GETPOS_MENU]));
@@ -175,6 +177,7 @@ const char *goal;
          : "(Reset 'whatis_coord' option to omit coordinates from '%s' text.)",
                     visctrl(Cmd.spkeys[NHKF_GETPOS_AUTODESC]));
         }
+ skip_non_mons:
         /* disgusting hack; the alternate selection characters work for any
            getpos call, but only matter for dowhatis (and doquickwhatis) */
         doing_what_is = (goal == what_is_an_unknown_object);
@@ -2327,8 +2330,10 @@ static const char *const sir_Terry_novels[] = {
     "A Hat Full of Sky", "Going Postal", "Thud!", "Wintersmith",
     "Making Money", "Unseen Academicals", "I Shall Wear Midnight", "Snuff",
     "Raising Steam", "The Shepherd's Crown",
-    /* Specific journal for the ICE Queen side branch */
-    "The Adventurer's Journal"
+    /* Specific journal for the Ice Queen side branch */
+    "The Adventurer's Journal",
+    /* Specific journal for forge recipes */
+    "The Blacksmith's Cookbook"
 };
 
 const char *

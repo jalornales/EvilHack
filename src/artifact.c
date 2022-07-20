@@ -79,10 +79,12 @@ hack_artifacts()
         artilist[ART_DIRGE].role = NON_PM;
     }
 
-    /* Demonbane should always be in the Priest's list of available toys
-     * even though this might look a little odd when it comes out Chaotic */
     if (Role_if(PM_PRIEST)) {
+        /* Demonbane should always be in the Priest's list of available toys
+         * even though this might look a little odd when it comes out Chaotic */
         artilist[ART_DEMONBANE].alignment = alignmnt;
+        /* For crowning purposes */
+        artilist[ART_MJOLLNIR].alignment = alignmnt;
     }
 
     /* Fix up the quest artifact */
@@ -440,6 +442,10 @@ boolean allow_detrimental;
             continue; /* these are mutually exclusive */
 
         if (otmp->material != CLOTH
+            && (j & ITEM_OILSKIN))
+            continue;
+
+        if (otmp->otyp == OILSKIN_CLOAK
             && (j & ITEM_OILSKIN))
             continue;
 
@@ -883,7 +889,8 @@ long wp_mask;
             u.uroleplay.hallu = FALSE;
             pline_The("world no longer makes any sense to you!");
         }
-        (void) make_hallucinated((long) !on, restoring ? FALSE : TRUE,
+        (void) make_hallucinated((long) !on,
+                                 program_state.restoring ? FALSE : TRUE,
                                  wp_mask);
     }
     if (spfx & SPFX_ESP) {
@@ -955,15 +962,13 @@ long wp_mask;
         vision_full_recalc = 1;
     }
     if (spfx & SPFX_REFLECT) {
-        /* Knights only have to carry the mirror; everyone else must wield it */
-        if (Role_if(PM_KNIGHT)) {
+        if (otmp->oartifact == ART_MAGIC_MIRROR_OF_MERLIN) {
             if (on)
                 EReflecting |= wp_mask;
             else
                 EReflecting &= ~wp_mask;
         } else if (otmp
-            && (otmp->oartifact == ART_MAGIC_MIRROR_OF_MERLIN
-                || otmp->oartifact == ART_LONGBOW_OF_DIANA
+            && (otmp->oartifact == ART_LONGBOW_OF_DIANA
                 || otmp->oartifact == ART_CROSSBOW_OF_CARL)
             && (wp_mask & W_WEP)) { /* wielding various reflecting artifacts */
             if (on)
@@ -2498,6 +2503,10 @@ int dieroll; /* needed for Magicbane and vorpal blades */
                           body_part(NECK));
                     return TRUE;
                 }
+                if (Hidinshell) {
+                    pline("%s glances harmlessly off of your protective shell.", wepdesc);
+                    return TRUE;
+                }
                 *dmgptr = 2 * (Upolyd ? u.mh : u.uhp) + FATAL_DAMAGE_MODIFIER;
                 pline(behead_msg[rn2(SIZE(behead_msg))], wepdesc, "you");
                 otmp->dknown = TRUE;
@@ -3666,11 +3675,13 @@ is_magic_key(mon, obj)
 struct monst *mon; /* if null, non-rogue is assumed */
 struct obj *obj;
 {
-    if (((obj && obj->oartifact == ART_MASTER_KEY_OF_THIEVERY)
-         && ((mon == &youmonst) ? Role_if(PM_ROGUE)
-                                : (mon && mon->data == &mons[PM_ROGUE])))
-        ? !obj->cursed : obj->blessed)
-        return TRUE;
+    if (obj && obj->oartifact == ART_MASTER_KEY_OF_THIEVERY) {
+        if ((mon == &youmonst) ? Role_if(PM_ROGUE)
+                               : (mon && mon->data == &mons[PM_ROGUE]))
+            return !obj->cursed; /* a rogue; non-cursed suffices for magic */
+        /* not a rogue; key must be blessed to behave as a magic one */
+        return obj->blessed;
+    }
     return FALSE;
 }
 

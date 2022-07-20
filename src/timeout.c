@@ -665,10 +665,17 @@ nh_timeout()
                 }
 
                 if (!!(u.usick_type & SICK_ZOMBIE)) {
-                    u.ugrave_arise = urace.zombienum;
-                    killer.format = NO_KILLER_PREFIX;
-                    Sprintf(killer.name, "zombified by %s",
-                            an(killer.name));
+                    if (Race_if(PM_CENTAUR)
+                        || Race_if(PM_ILLITHID) || Race_if(PM_TORTLE)) {
+                        killer.format = NO_KILLER_PREFIX;
+                        Sprintf(killer.name, "diseased by %s",
+                                an(killer.name));
+                    } else {
+                        u.ugrave_arise = urace.zombienum;
+                        killer.format = NO_KILLER_PREFIX;
+                        Sprintf(killer.name, "zombified by %s",
+                                an(killer.name));
+                    }
                 }
                 done_timeout(POISONING, SICK);
                 u.usick_type = 0;
@@ -1980,7 +1987,7 @@ timer_sanity_check()
     timer_element *curr;
 
     /* this should be much more complete */
-    for (curr = timer_base; curr; curr = curr->next)
+    for (curr = timer_base; curr; curr = curr->next) {
         if (curr->kind == TIMER_OBJECT) {
             struct obj *obj = curr->arg.a_obj;
 
@@ -1988,7 +1995,20 @@ timer_sanity_check()
                 impossible("timer sanity: untimed obj %s, timer %ld",
                       fmt_ptr((genericptr_t) obj), curr->tid);
             }
+        } else if (curr->kind == TIMER_LEVEL) {
+            long where = curr->arg.a_long;
+            xchar x = (xchar) ((where >> 16) & 0xFFFF),
+                  y = (xchar) (where & 0xFFFF);
+
+            if (!isok(x, y)) {
+                impossible("timer sanity: spot timer %ld at <%d,%d>",
+                           curr->tid, x, y);
+            } else if (curr->func_index == MELT_ICE_AWAY && !is_ice(x, y)) {
+                impossible("timer sanity: melt timer %ld on non-ice %d <%d,%d>",
+                           curr->tid, levl[x][y].typ, x, y);
+            }
         }
+    }
 }
 
 /*

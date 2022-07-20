@@ -151,6 +151,7 @@ STATIC_PTR int NDECL(wiz_where);
 STATIC_PTR int NDECL(wiz_detect);
 STATIC_PTR int NDECL(wiz_panic);
 STATIC_PTR int NDECL(wiz_polyself);
+STATIC_PTR int NDECL(wiz_kill);
 STATIC_PTR int NDECL(wiz_level_tele);
 STATIC_PTR int NDECL(wiz_level_change);
 STATIC_PTR int NDECL(wiz_telekinesis);
@@ -973,6 +974,95 @@ wiz_detect(VOID_ARGS)
     return 0;
 }
 
+/* the #wizkill command - pick targets and reduce them to 0HP;
+   by default, the hero is credited/blamed */
+static int
+wiz_kill()
+{
+    struct monst *mtmp;
+    coord cc;
+    int ans;
+    char c, qbuf[QBUFSZ];
+    const char *prompt = "Pick first monster to slay";
+    boolean save_verbose = flags.verbose;
+
+    if (iflags.debug_fuzzer)
+        return 0;
+
+    cc.x = u.ux, cc.y = u.uy;
+    for (;;) {
+        pline("%s:", prompt);
+        prompt = "Next monster";
+
+        flags.verbose = FALSE;
+        ans = getpos(&cc, TRUE, "a monster");
+        flags.verbose = save_verbose;
+        if (ans < 0 || cc.x < 1)
+            break;
+
+        mtmp = 0;
+        if (cc.x == u.ux && cc.y == u.uy) {
+            if (u.usteed) {
+                Sprintf(qbuf, "Kill %.110s?", mon_nam(u.usteed));
+                if ((c = ynq(qbuf)) == 'q')
+                    break;
+                if (c == 'y')
+                    mtmp = u.usteed;
+            }
+            if (!mtmp) {
+                Sprintf(qbuf, "%s?", Role_if(PM_SAMURAI) ? "Perform seppuku"
+                                                         : "Commit suicide");
+                if (paranoid_query(TRUE, qbuf)) {
+                    Sprintf(killer.name, "%s own player", uhis());
+                    killer.format = KILLED_BY;
+                    done(DIED);
+                }
+                break;
+            }
+        } else if (u.uswallow) {
+            mtmp = (distu(cc.x, cc.y) <= 2) ? u.ustuck : 0;
+        } else {
+            mtmp = m_at(cc.x, cc.y);
+        }
+
+        if (mtmp) {
+            /* we don't require that the monster be seen or sensed so
+               we issue our own message in order to name it in case it
+               isn't; note that if it triggers other kills, those might
+               be referred to as "it" */
+            int tame = !!mtmp->mtame, seen = canspotmon(mtmp),
+                flgs = SUPPRESS_IT | SUPPRESS_HALLUCINATION
+                       | ((tame && has_mname(mtmp)) ? SUPPRESS_SADDLE : 0),
+                articl = tame ? ARTICLE_YOUR : seen ? ARTICLE_THE : ARTICLE_A;
+            const char *adjs = tame ? (!seen ? "poor, unseen" : "poor")
+                                    : (!seen ? "unseen" : (const char *) 0);
+            char *Mn = x_monnam(mtmp, articl, adjs, flgs, FALSE);
+
+            if (!iflags.menu_requested) {
+                /* normal case: hero is credited/blamed */
+                You("%s %s!", nonliving(mtmp->data) ? "destroy" : "kill", Mn);
+                xkilled(mtmp, XKILL_NOMSG);
+            } else { /* 'm'-prefix */
+                /* we know that monsters aren't moving because player has
+                   just issued this #wizkill command, but if 'mtmp' is a
+                   gas spore whose explosion kills any other monsters we
+                   need to have the mon_moving flag be True in order to
+                   avoid blaming or crediting hero for their deaths */
+                context.mon_moving = TRUE;
+                pline("%s is %s.", upstart(Mn),
+                      nonliving(mtmp->data) ? "destroyed" : "killed");
+                /* Null second arg suppresses the usual message */
+                monkilled(mtmp, (char *) 0, AD_PHYS);
+                context.mon_moving = FALSE;
+            }
+        } else {
+            There("is no monster there.");
+            break;
+        }
+    }
+    return 0;
+}
+
 /* ^V command - level teleport */
 STATIC_PTR int
 wiz_level_tele(VOID_ARGS)
@@ -1042,7 +1132,7 @@ wiz_telekinesis(VOID_ARGS)
     pline("Pick a monster to hurtle.");
     do {
         ans = getpos(&cc, TRUE, "a monster");
-        if (ans < 0 || cc.x < 0)
+        if (ans < 0 || cc.x < 1)
             return 2;
 
         if ((((mtmp = m_at(cc.x, cc.y)) != 0) && canspotmon(mtmp))
@@ -1257,6 +1347,8 @@ wiz_map_levltyp(VOID_ARGS)
                 Strcat(dsc, " Ice Queen branch");
             if (slev->flags.vecnad)
                 Strcat(dsc, " Vecna's branch");
+            if (slev->flags.gtown)
+                Strcat(dsc, " Goblin Town");
             if (slev->flags.town)
                 Strcat(dsc, " town");
             if (slev->flags.rogue_like)
@@ -2460,6 +2552,8 @@ int final;
     } else if (Flying) { /* can only fly when not levitating */
         enl_msg(youtoo, are, were, "flying", from_what(FLYING));
     }
+    if (Hidinshell)
+        you_are("hiding in your shell", "");
     if (Underwater) {
         you_are("underwater", "");
     } else if (u.uinwater) {
@@ -3719,6 +3813,9 @@ int final;
     if (u.uachieve.killed_vecna)
         enl_msg(You_, "have ", "",
                 "defeated Vecna", ""), ++acnt;
+    if (u.uachieve.killed_gking)
+        enl_msg(You_, "have ", "",
+                "defeated the Goblin King", ""), ++acnt;
     if (u.uachieve.defeat_icequeen)
         enl_msg(You_, "have ", "",
                 "defeated Kathryn the Ice Queen", ""), ++acnt;
@@ -3796,6 +3893,7 @@ struct ext_func_tab extcmdlist[] = {
             enter_explore_mode, IFBURIED },
     { 'f', "fire", "fire ammunition from quiver", dofire },
     { M('f'), "force", "force a lock", doforce, AUTOCOMPLETE },
+    { M('F'), "forge", "combine two objects to create a new object", doforging, AUTOCOMPLETE },
     { ';', "glance", "show what type of thing a map symbol corresponds to",
             doquickwhatis, IFBURIED | GENERALCMD },
     { '?', "help", "give a help message", dohelp, IFBURIED | GENERALCMD },
@@ -3942,6 +4040,8 @@ struct ext_func_tab extcmdlist[] = {
             wiz_identify, IFBURIED | AUTOCOMPLETE | WIZMODECMD },
     { '\0', "wizintrinsic", "set an intrinsic",
             wiz_intrinsic, IFBURIED | AUTOCOMPLETE | WIZMODECMD },
+    { '\0', "wizkill", "slay a monster",
+            wiz_kill, IFBURIED | AUTOCOMPLETE | WIZMODECMD },
     { C('v'), "wizlevelport", "teleport to another level",
             wiz_level_tele, IFBURIED | AUTOCOMPLETE | WIZMODECMD },
     { '\0', "wizmakemap", "recreate the current level",
@@ -5928,10 +6028,15 @@ boolean doit;
     if (IS_FORGE(typ)) {
         add_herecmd_menuitem(win, dodrink, "Really drink the lava from the forge?");
     }
-    if (IS_FOUNTAIN(typ))
+    if (IS_FOUNTAIN(typ) || IS_FORGE(typ))
         Sprintf(buf, "Dip something into the %s",
                 defsyms[IS_FOUNTAIN(typ) ? S_fountain : S_forge].explanation);
         add_herecmd_menuitem(win, dodip, buf);
+    if (IS_FORGE(typ)) {
+        Sprintf(buf, "Combine objects in the %s",
+                defsyms[S_forge].explanation);
+        add_herecmd_menuitem(win, doforging, buf);
+    }
     if (IS_THRONE(typ))
         add_herecmd_menuitem(win, dosit,
                              "Sit on the throne");
@@ -6054,6 +6159,9 @@ int x, y, mod;
                 || IS_SINK(levl[u.ux][u.uy].typ)
                 || IS_FORGE(levl[u.ux][u.uy].typ)) {
                 cmd[0] = cmd_from_func(mod == CLICK_1 ? dodrink : dodip);
+                return cmd;
+            } else if (IS_FORGE(levl[u.ux][u.uy].typ)) {
+                cmd[0] = cmd_from_func(mod == CLICK_1 ? doforging : dodip);
                 return cmd;
             } else if (IS_THRONE(levl[u.ux][u.uy].typ)) {
                 cmd[0] = cmd_from_func(dosit);

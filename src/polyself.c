@@ -107,7 +107,7 @@ set_uasmon()
        show latent flight capability always blocked by levitation */
     /* this property also checks race instead of role */
     PROPSET(FLYING, (is_flyer(racedat) && !is_floater(racedat)));
-    if (!restoring) /* if loading, defer wings check until we have a steed */
+    if (!program_state.restoring) /* if loading, defer wings check until we have a steed */
         check_wings(TRUE);
     PROPSET(SWIMMING, is_swimmer(mdat));
     /* [don't touch MAGICAL_BREATHING here; both Amphibious and Breathless
@@ -457,8 +457,8 @@ int psflags;
     old_light = emits_light(youmonst.data);
     mntmp = NON_PM;
 
-    if (u.uinshell)
-        u.uinshell = 0;
+    if (Hidinshell)
+        toggleshell();
 
     if (monsterpoly && isvamp)
         goto do_vampyr;
@@ -667,6 +667,9 @@ int mntmp;
         exercise(A_WIS, TRUE);
         return 0;
     }
+
+    if (Hidinshell)
+        toggleshell();
 
     /* KMH, conduct */
     if (!u.uconduct.polyselfs++)
@@ -1083,7 +1086,8 @@ break_armor()
         }
     }
     if (nohands(youmonst.data) || verysmall(youmonst.data)
-        || slithy(youmonst.data) || youmonst.data->mlet == S_CENTAUR) {
+        || slithy(youmonst.data) || racial_centaur(&youmonst)
+        || racial_tortle(&youmonst)) {
         if ((otmp = uarmf) != 0) {
             if (donning(otmp))
                 cancel_don();
@@ -1093,6 +1097,26 @@ break_armor()
                 Your("boots %s off your feet!",
                      verysmall(youmonst.data) ? "slide" : "are pushed");
             (void) Boots_off();
+            dropp(otmp);
+        }
+    }
+    if (racial_tortle(&youmonst)) {
+        if ((otmp = uarmh) != 0 && is_hard(otmp)) {
+            if (donning(otmp))
+                cancel_don();
+            Your("%s falls to the %s!", helm_simple_name(otmp),
+                 surface(u.ux, u.uy));
+            (void) Helmet_off();
+            dropp(otmp);
+        }
+        if ((otmp = uarmg) != 0 && is_hard(otmp)) {
+            if (donning(otmp))
+                cancel_don();
+            /* Drop weapon along with gloves */
+            You("drop your gloves%s!", uwep ? " and weapon" : "");
+            drop_weapon(0);
+            (void) Gloves_off();
+            /* Glib manipulation (ends immediately) handled by Gloves_off */
             dropp(otmp);
         }
     }
@@ -1186,6 +1210,7 @@ rehumanize()
     if (emits_light(youmonst.data))
         del_light_source(LS_MONSTER, monst_to_any(&youmonst));
     polyman("return to %s form!", urace.adj);
+    break_armor();
 
     if (u.uhp < 1) {
         /* can only happen if some bit of code reduces u.uhp
@@ -1661,13 +1686,17 @@ toggleshell()
     }
 
     You("%s your shell.", was_hiding ? "emerge from" : "retreat into");
-    u.uinshell = was_hiding ? -rnz(350) : 200;
+    /* maximum of 200 turns our hero can stay inside their shell,
+       and then 300-400 turns before they can hide in it again
+       after emerging from it */
+    u.uinshell = was_hiding ? -rn1(100, 300) : 200;
 
     if (!was_hiding)
         HHalf_physical_damage |= FROMOUTSIDE;
     else
         HHalf_physical_damage &= ~FROMOUTSIDE;
 
+    find_ac();
     context.botl = 1;
     if (was_blind ^ Blind)
         toggle_blindness();

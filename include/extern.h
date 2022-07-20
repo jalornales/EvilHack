@@ -284,6 +284,7 @@ E boolean FDECL(is_lava, (int, int));
 E boolean FDECL(is_pool_or_lava, (int, int));
 E boolean FDECL(is_ice, (int, int));
 E boolean FDECL(is_moat, (int, int));
+E boolean FDECL(is_open_air, (int, int));
 E schar FDECL(db_under_typ, (int));
 E int FDECL(is_drawbridge_wall, (int, int));
 E boolean FDECL(is_db_wall, (int, int));
@@ -577,6 +578,7 @@ E boolean FDECL(acceptable_pet_target, (struct monst*, struct monst*, BOOLEAN_P)
 E struct obj *FDECL(droppables, (struct monst *));
 E int FDECL(dog_nutrition, (struct monst *, struct obj *));
 E int FDECL(dog_eat, (struct monst *, struct obj *, int, int, BOOLEAN_P));
+E void FDECL(dog_givit, (struct monst *, struct permonst *));
 E int FDECL(dog_move, (struct monst *, int));
 #ifdef USE_TRAMPOLI
 E void FDECL(wantdoor, (int, int, genericptr_t));
@@ -676,6 +678,7 @@ E boolean FDECL(In_quest, (d_level *));
 E boolean FDECL(In_mines, (d_level *));
 E boolean FDECL(In_icequeen_branch, (d_level *));
 E boolean FDECL(In_vecna_branch, (d_level *));
+E boolean FDECL(In_goblintown, (d_level *));
 E branch *FDECL(dungeon_branch, (const char *));
 E boolean FDECL(at_dgn_entrance, (const char *));
 E boolean FDECL(In_hell, (d_level *));
@@ -754,6 +757,7 @@ E int NDECL(done2);
 E void FDECL(done_intr, (int));
 #endif
 E void FDECL(done_in_by, (struct monst *, int));
+E void NDECL(done_object_cleanup);
 #endif /* !MAKEDEFS_C && !LEV_LEX_C */
 E void VDECL(panic, (const char *, ...)) PRINTF_F(1, 2) NORETURN;
 #if !defined(MAKEDEFS_C) && !defined(LEV_LEX_C)
@@ -921,14 +925,16 @@ E void FDECL(dogushforth, (int));
 E void FDECL(gush, (int, int, genericptr_t));
 #endif
 E void FDECL(dryup, (XCHAR_P, XCHAR_P, BOOLEAN_P));
-E void FDECL(blowupforge, (int, int));
+E void FDECL(dipforge, (struct obj *));
+E int NDECL(doforging);
 E void NDECL(drinkfountain);
 E void FDECL(dipfountain, (struct obj *));
 E void FDECL(breakforge, (int, int));
+E void FDECL(blowupforge, (int, int));
+E void FDECL(coolforge, (int, int));
+E void NDECL(drinkforge);
 E void FDECL(breaksink, (int, int));
 E void NDECL(drinksink);
-E void NDECL(drinkforge);
-E void FDECL(dipforge, (struct obj *));
 
 /* ### hack.c ### */
 
@@ -974,6 +980,7 @@ E int NDECL(max_capacity);
 E boolean FDECL(check_capacity, (const char *));
 E int FDECL(inv_cnt, (BOOLEAN_P));
 E long FDECL(money_cnt, (struct obj *));
+E void FDECL(spot_checks, (xchar, xchar, schar));
 
 /* ### hacklib.c ### */
 
@@ -1068,6 +1075,7 @@ E void FDECL(freeinv_core, (struct obj *));
 E void FDECL(freeinv, (struct obj *));
 E void FDECL(delallobj, (int, int));
 E void FDECL(delobj, (struct obj *));
+E void FDECL(delobj_core, (struct obj *, boolean));
 E struct obj *FDECL(sobj_at, (int, int, int));
 E struct obj *FDECL(nxtobj, (struct obj *, int, BOOLEAN_P));
 E struct obj *FDECL(carrying, (int));
@@ -1535,6 +1543,7 @@ E struct obj *FDECL(mlifesaver, (struct monst *));
 E boolean FDECL(corpse_chance, (struct monst *, struct monst *, BOOLEAN_P));
 E void NDECL(cerberusdead);
 E void NDECL(vecnadead);
+E void NDECL(goblinkingdead);
 E void FDECL(mondead, (struct monst *));
 E void FDECL(mondied, (struct monst *));
 E void FDECL(mongone, (struct monst *));
@@ -2750,6 +2759,7 @@ E boolean NDECL(in_iceq_effects);
 E boolean NDECL(lava_effects);
 E void NDECL(sink_into_lava);
 E void NDECL(sokoban_guilt);
+E void FDECL(trap_ice_effects, (xchar x, xchar y, boolean ice_is_melting));
 
 /* ### u_init.c ### */
 
@@ -3134,6 +3144,7 @@ E int FDECL(wseg_at, (struct monst *, int, int));
 
 E void FDECL(setworn, (struct obj *, long));
 E void FDECL(setnotworn, (struct obj *));
+E void NDECL(allunworn);
 E struct obj *FDECL(wearmask_to_obj, (long));
 E long FDECL(wearslot, (struct obj *));
 E void FDECL(mon_set_minvis, (struct monst *));

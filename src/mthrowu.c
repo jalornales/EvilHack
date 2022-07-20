@@ -178,8 +178,10 @@ int x, y;
                 retvalu = 0;
             }
         }
-    } else
+    } else {
         obfree(obj, (struct obj *) 0);
+    }
+    thrownobj = 0;
     return retvalu;
 }
 
@@ -696,6 +698,8 @@ register boolean verbose;
         singleobj = splitobj(obj, 1L);
         obj_extract_self(singleobj);
     }
+    /* global pointer for missile object in OBJ_FREE state */
+    thrownobj = singleobj;
 
     singleobj->owornmask = 0; /* threw one of multiple weapons in hand? */
 
@@ -734,8 +738,8 @@ register boolean verbose;
     if (sym)
         tmp_at(DISP_FLASH, obj_to_glyph(singleobj, rn2_on_display_rng));
     while (range-- > 0) { /* Actually the loop is always exited by break */
-        bhitpos.x += dx;
-        bhitpos.y += dy;
+        singleobj->ox = bhitpos.x += dx;
+        singleobj->oy = bhitpos.y += dy;
         mtmp = m_at(bhitpos.x, bhitpos.y);
         if (mtmp && shade_miss(mon, mtmp, singleobj, TRUE, TRUE)) {
             /* if mtmp is a shade and missile passes harmlessly through it,
@@ -912,6 +916,10 @@ register boolean verbose;
 
 cleanup_thrown:
     ammo_stack = (struct obj *) 0;
+
+    /* note: all early returns follow drop_throw() which clears thrownobj */
+    thrownobj = 0;
+    return;
 }
 
 #undef MT_FLIGHTCHECK
@@ -1462,6 +1470,14 @@ unsigned breakflags; /* breakage control */
             if (!nodissolve)
                 dissolve_bars(barsx, barsy);
         }
+    } else if (obj_type == LONG_SWORD && otmp->oartifact == ART_DIRGE) {
+        if (cansee(barsx, barsy) && !nodissolve)
+            pline_The("acidic blade slices right through the iron bars!");
+        else
+            You_hear(Hallucination ? "a hot knife slice through butter!"
+                                   : "a hissing noise.");
+        if (!nodissolve)
+            dissolve_bars(barsx, barsy);
     } else {
         if (!Deaf)
             pline("%s!", (obj_type == BOULDER || obj_type == HEAVY_IRON_BALL)

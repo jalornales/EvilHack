@@ -1088,9 +1088,9 @@ boolean silent; /* we assume a wardrobe change if false */
     } else if (Is_dragon_scaled_armor(uarm) && !is_hard(uarm)) {
         if (!silent)
             You("arrange the scales around your wings.");
-    } else if (uarm->otyp == JACKET) {
+    } else if (uarm && !is_hard(uarm)) {
         if (!silent && uarm != last_worn_armor)
-            pline1("This jacket seems to have holes for wings.");
+            Your("%s seems to have holes for wings.", simpleonames(uarm));
     } else {
         if (!(uamul && uamul->otyp == AMULET_OF_FLYING))
             BFlying |= W_ARM;
@@ -2199,7 +2199,9 @@ boolean noisy;
                           helm_simple_name(otmp),
                           plur(num_horns(youmonst.data)));
             err++;
-        } else if (Race_if(PM_TORTLE) && is_hard(otmp)) {
+        } else if (!Upolyd && Race_if(PM_TORTLE) && is_hard(otmp)
+                   && !(Role_if(PM_PRIEST)
+                        && otmp->oartifact == ART_MITRE_OF_HOLINESS)) {
             /* Tortles can't retreat back into their shells
                whilst wearing rigid head gear */
             if (noisy)
@@ -2236,7 +2238,7 @@ boolean noisy;
                 You("have no feet..."); /* not body_part(FOOT) */
             err++;
         } else if ((Upolyd && youmonst.data->mlet == S_CENTAUR)
-                   || (Race_if(PM_CENTAUR))) {
+                   || (!Upolyd && Race_if(PM_CENTAUR))) {
             /* break_armor() pushes boots off for centaurs,
                so don't let dowear() put them back on... */
             if (noisy)
@@ -2244,7 +2246,7 @@ boolean noisy;
                       c_boots); /* makeplural(body_part(FOOT)) yields
                                    "rear hooves" which sounds odd */
             err++;
-        } else if (Race_if(PM_TORTLE)) {
+        } else if (!Upolyd && Race_if(PM_TORTLE)) {
             /* Tortles can't retreat back into their shells
                whilst wearing footwear, plus their shape is
                all wrong */
@@ -2288,7 +2290,7 @@ boolean noisy;
                 Your("%s are too slippery to pull on %s.",
                      fingers_or_gloves(FALSE), gloves_simple_name(otmp));
             err++;
-        } else if (Race_if(PM_TORTLE) && is_hard(otmp)) {
+        } else if (!Upolyd && Race_if(PM_TORTLE) && is_hard(otmp)) {
             /* Tortles can't retreat back into their shells
                whilst wearing rigid gauntlets */
             if (noisy)
@@ -2318,7 +2320,7 @@ boolean noisy;
             err++;
         } else
             *mask = W_ARMC;
-        if (Race_if(PM_GIANT) && otmp
+        if (!Upolyd && Race_if(PM_GIANT) && otmp
             && otmp->otyp == CHROMATIC_DRAGON_SCALES) {
             *mask = W_ARMC;
             if (noisy)
@@ -2340,7 +2342,7 @@ boolean noisy;
             err++;
         } else
             *mask = W_ARM;
-        if (Race_if(PM_GIANT) && Role_if(PM_SAMURAI)
+        if (!Upolyd && Race_if(PM_GIANT) && Role_if(PM_SAMURAI)
             && otmp && otmp->otyp == LARGE_SPLINT_MAIL)
             *mask = W_ARM;
     } else {
@@ -2650,7 +2652,7 @@ find_ac()
 
     /* armor class from worn gear */
 
-    int racial_bonus, dex_adjust_ac;
+    int racial_bonus, dex_adjust_ac, tortle_ac;
 
     /* Wearing racial armor is worth +x to the armor's AC; orcs get a slightly
      * larger bonus to compensate their sub-standard equipment, lack of equipment,
@@ -2723,8 +2725,38 @@ find_ac()
         uac -= u.ublessed;
     uac -= u.uspellprot;
 
+    /* tortle hiding in its shell */
     if (Hidinshell)
         uac -= 40;
+
+    /* tortles gradually gain more protection
+       as they 'grow up' and their shells become
+       tougher and thicker */
+    tortle_ac = 0;
+    if (Race_if(PM_TORTLE)) {
+        if (u.ulevel <= 2)
+            tortle_ac -= 0;
+        else if (u.ulevel <= 5)
+            tortle_ac -= 1;
+        else if (u.ulevel <= 8)
+            tortle_ac -= 2;
+        else if (u.ulevel <= 11)
+            tortle_ac -= 3;
+        else if (u.ulevel <= 14)
+            tortle_ac -= 4;
+        else if (u.ulevel <= 17)
+            tortle_ac -= 5;
+        else if (u.ulevel <= 20)
+            tortle_ac -= 6;
+        else if (u.ulevel <= 23)
+            tortle_ac -= 7;
+        else if (u.ulevel <= 26)
+            tortle_ac -= 8;
+        else if (u.ulevel <= 29)
+            tortle_ac -= 9;
+        else if (u.ulevel == 30)
+            tortle_ac -= 10;
+    }
 
     /* Dexterity affects your base AC */
     dex_adjust_ac = 0;
@@ -2757,7 +2789,7 @@ find_ac()
             dex_adjust_ac = 0;
     }
 
-    uac = uac + dex_adjust_ac;
+    uac = uac + dex_adjust_ac + tortle_ac;
 
     /* [The magic binary numbers 127 and -128 should be replaced with the
      * mystic decimal numbers 99 and -99 which require no explanation to
@@ -3524,7 +3556,8 @@ boolean only_if_known_cursed; /* ignore covering unless known to be cursed */
         return TRUE;
     }
     /* check for ring covered by gloves */
-    if ((obj == uleft || obj == uright) && uarmg && BLOCKSACCESS(uarmg)) {
+    if ((obj == uleft || obj == uright) && uarmg && BLOCKSACCESS(uarmg)
+        && uarmg->oartifact != ART_HAND_OF_VECNA) {
         if (verb) {
             Strcpy(buf, yname(uarmg));
             You(need_to_take_off_outer_armor, buf, verb, yname(obj));

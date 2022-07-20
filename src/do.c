@@ -135,6 +135,25 @@ boolean pushing;
         else
             obfree(otmp, (struct obj *) 0);
         return TRUE;
+    } else if (is_open_air(rx, ry)) {
+        const char *it_falls = Tobjnam(otmp, "fall"),
+                   *disappears = otense(otmp, "disappear");
+
+        if (pushing) {
+            char whobuf[BUFSZ];
+
+            Strcpy(whobuf, "you");
+            if (u.usteed)
+                Strcpy(whobuf, y_monnam(u.usteed));
+            pline("%s %s %s over the edge.", upstart(whobuf),
+                  vtense(whobuf, "push"), the(xname(otmp)));
+            delobj(otmp);
+        } else {
+            obfree(otmp, (struct obj *) 0);
+        }
+        if ((pushing && !Blind) || cansee(rx, ry))
+            pline("%s away and %s.", it_falls, disappears);
+        return TRUE;
     }
     return FALSE;
 }
@@ -250,7 +269,7 @@ deletedwithboulder:
     } else if (obj->otyp == AMULET_OF_YENDOR
                && (obj->cursed ? rn2(3) : obj->blessed
                                ? !rn2(16) : !rn2(4))
-               && !(IS_AIR(levl[x][y].typ) && In_V_tower(&u.uz))) {
+               && !(is_open_air(x, y))) {
         /* prevent recursive call of teleportation through flooreffects */
         if (!obj->orecursive) {
             if (cansee(x, y))
@@ -282,6 +301,13 @@ deletedwithboulder:
             map_background(x, y, 0); /* can't tell what kind of water it is */
             newsym(x, y);
         }
+        if (is_puddle(x, y) && !rn2(3)) {
+            /* shallow water isn't an endless resource like a pool/moat */
+            levl[x][y].typ = ROOM;
+            newsym(x, y);
+            if (cansee(x, y))
+                pline_The("puddle dries up.");
+        }
         res = water_damage(obj, NULL, FALSE, x, y) == ER_DESTROYED;
     } else if (u.ux == x && u.uy == y && (t = t_at(x, y)) != 0
                && (uteetering_at_seen_pit(t) || uescaped_shaft(t))) {
@@ -300,11 +326,14 @@ deletedwithboulder:
             (void) obj_meld(&obj, &otmp);
         }
         res = (boolean) !obj;
-    } else if (IS_AIR(levl[x][y].typ) && In_V_tower(&u.uz)) {
-        /* Dropping the Amulet or any of the invocation
-           items teleports them to the deepest demon prince
-           lair rather than destroying them */
+    } else if (is_open_air(x, y)) {
+        const char *it_falls = Tobjnam(obj, "fall"),
+                   *disappears = otense(obj, "disappear");
+
         if (obj_resists(obj, 0, 0)) {
+            /* Dropping the Amulet or any of the invocation
+               items teleports them to the deepest demon prince
+               lair rather than destroying them */
             d_level dest = hellc_level;
 
             add_to_migration(obj);
@@ -314,15 +343,29 @@ deletedwithboulder:
             if (wizard)
                 pline("%d:%d", obj->ox, obj->oy);
             if (!Blind)
-                pline("%s %s away and %s.  Perhaps it wound up elsewhere in the dungeon...", The(xname(obj)),
-                      otense(obj, "fall"), otense(obj, "disappear"));
+                pline("%s away and %s.  Perhaps it wound up elsewhere in the dungeon...",
+                      it_falls, disappears);
+            res = TRUE;
+        } else if (obj == uball || obj == uchain) {
+            if (obj == uball && !Levitation) {
+                drop_ball(x, y);
+                pline("%s away, and %s you down with %s!",
+                      it_falls, otense(obj, "yank"),
+                      obj->quan > 1L ? "them" : "it");
+                You("plummet several thousand feet to your death.");
+                Sprintf(killer.name,
+                        "fell to %s death", uhis());
+                killer.format = NO_KILLER_PREFIX;
+                done(DIED);
+            }
+            res = FALSE;
         } else {
             if (!Blind)
-                pline("%s %s away and %s.", The(xname(obj)),
-                      otense(obj, "fall"), otense(obj, "disappear"));
+                pline("%s away and %s.", it_falls, disappears);
             delobj(obj);
+            res = TRUE;
         }
-        res = TRUE;
+        newsym(x, y);
     }
 
     bhitpos = save_bhitpos;
@@ -1172,6 +1215,7 @@ dodown()
             }
         }
     }
+
     if (on_level(&valley_level, &u.uz) && !u.uevent.gehennom_entered) {
         /* The gates of hell remain closed to the living
            while Cerberus is still alive to guard them */
@@ -1491,6 +1535,31 @@ boolean at_stairs, falling, portal;
     if (on_level(&u.uz, &qstart_level) && !newdungeon && !ok_to_quest()) {
         pline("A mysterious force prevents you from descending.");
         return;
+    }
+
+    /* Prevent the player from accessing either Mine Town or Mines' End
+     * unless they have defeated the Goblin King. Using the stairs or
+     * falling through a hole or trap door is blocked, but our hero can
+     * still levelport to either location. The Goblin King's wards are
+     * decent, but they aren't all-powerful */
+    if (at_stairs || falling) {
+        if ((!up && (ledger_no(&u.uz) == ledger_no(&minetn_level) - 1))
+            || (!up && (ledger_no(&u.uz) == ledger_no(&minetn_level)))
+            || (!up && (ledger_no(&u.uz) == ledger_no(&mineend_level) - 1))) {
+            if (!u.uevent.ugking) {
+                if (at_stairs) {
+                    if (Blind) {
+                        pline("A mysterious force prevents you from accessing the stairs.");
+                    } else {
+                        You("see a magical glyph hovering in midair, preventing access to the stairs.");
+                        pline("It reads 'Access denied, by order of the Goblin King'.");
+                    }
+                } else if (falling) {
+                    pline("A mysterious force prevents you from falling.");
+                }
+                return;
+            }
+        }
     }
 
     if (on_level(newlevel, &u.uz))
@@ -1820,6 +1889,15 @@ boolean at_stairs, falling, portal;
         u.uevent.vecnad_entered = 1;
         You("enter a desolate landscape, completely devoid of life.");
         pline("Every fiber of your being tells you to leave this evil place, now.");
+#ifdef MICRO
+        display_nhwindow(WIN_MESSAGE, FALSE);
+#endif
+    }
+
+    if (!In_goblintown(&u.uz0) && Ingtown
+        && !u.uevent.gtown_entered) {
+        u.uevent.gtown_entered = 1;
+        You("have entered Goblin Town, the lair of the Goblin King.");
 #ifdef MICRO
         display_nhwindow(WIN_MESSAGE, FALSE);
 #endif

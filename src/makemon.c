@@ -456,7 +456,7 @@ struct trobj Level20KitMonk2[] = {
 /* end monk structs */
 
 struct trobj Level20Kit1[] = {
-    { CRYSTAL_PLATE_MAIL, (4 | RND_SPE), ARMOR_CLASS, 1, 1 },
+    { RING_MAIL, (4 | RND_SPE), ARMOR_CLASS, 1, 1 },
     { GAUNTLETS_OF_POWER, (4 | RND_SPE), ARMOR_CLASS, 1, 1 },
     { CLOAK_OF_MAGIC_RESISTANCE, (4 | RND_SPE), ARMOR_CLASS, 1, 1 },
     { SPEED_BOOTS, (4 | RND_SPE), ARMOR_CLASS, 1, 1 },
@@ -1146,7 +1146,7 @@ register struct monst *mtmp;
                 w2 = KNIFE;
             if (w2)
                 (void) mongets(mtmp, w2);
-        } else if (racial_elf(mtmp)) {
+        } else if (racial_elf(mtmp) && !Ingtown) {
             if (rn2(2))
                 (void) mongets(mtmp,
 		 (rn2(2) && (mm == PM_GREY_ELF || mm == PM_ELVEN_NOBLE
@@ -1424,7 +1424,7 @@ register struct monst *mtmp;
                 if (!rn2(8))
                     (void) mongets(mtmp, SACK);
             }
-        } else if (is_dwarf(ptr)) {
+        } else if (is_dwarf(ptr) && !Ingtown) {
             if (rn2(7))
                 (void) mongets(mtmp, DWARVISH_CLOAK);
             if (rn2(7))
@@ -1498,7 +1498,7 @@ register struct monst *mtmp;
             (void) mongets(mtmp, (rn2(2)) ? CLUB : RUBBER_HOSE);
         break;
     case S_ORC:
-        if (rn2(2))
+        if (mm != PM_GOBLIN_KING && rn2(2))
             (void) mongets(mtmp, ORCISH_HELM);
         switch ((mm != PM_ORC_CAPTAIN) ? mm
                 : rn2(2) ? PM_MORDOR_ORC : PM_URUK_HAI) {
@@ -1739,8 +1739,12 @@ register struct monst *mtmp;
             if (!unique_corpstat(ptr)) {
                 if (strongmonst(ptr))
                     (void) mongets(mtmp, BATTLE_AXE);
-                else
-                    m_initthrow(mtmp, DART, 12);
+                else {
+                    if (is_gnome(ptr) && Ingtown)
+                        ;
+                    else
+                        m_initthrow(mtmp, DART, 12);
+                }
             }
             break;
         case 2:
@@ -1748,31 +1752,47 @@ register struct monst *mtmp;
                 if (strongmonst(ptr))
                     (void) mongets(mtmp, TWO_HANDED_SWORD);
                 else {
-                    (void) mongets(mtmp, CROSSBOW);
-                    m_initthrow(mtmp, CROSSBOW_BOLT, 12);
+                    if (is_gnome(ptr) && Ingtown) {
+                        ;
+                    } else {
+                        (void) mongets(mtmp, CROSSBOW);
+                        m_initthrow(mtmp, CROSSBOW_BOLT, 12);
+                    }
                 }
             }
             break;
         case 3:
             if (!unique_corpstat(ptr)) {
-                (void) mongets(mtmp, BOW);
-                m_initthrow(mtmp, ARROW, 12);
+                if (is_gnome(ptr) && Ingtown) {
+                    ;
+                } else {
+                    (void) mongets(mtmp, BOW);
+                    m_initthrow(mtmp, ARROW, 12);
+                }
             }
             break;
         case 4:
             if (!unique_corpstat(ptr)) {
                 if (strongmonst(ptr))
                     (void) mongets(mtmp, LONG_SWORD);
-                else
-                    m_initthrow(mtmp, DAGGER, 3);
+                else {
+                    if (is_gnome(ptr) && Ingtown)
+                        ;
+                    else
+                        m_initthrow(mtmp, DAGGER, 3);
+                }
             }
             break;
         case 5:
             if (!unique_corpstat(ptr)) {
                 if (strongmonst(ptr))
                     (void) mongets(mtmp, LUCERN_HAMMER);
-                else
-                    (void) mongets(mtmp, AKLYS);
+                else {
+                    if (is_gnome(ptr) && Ingtown)
+                        ;
+                    else
+                        (void) mongets(mtmp, AKLYS);
+                }
             }
             break;
         default:
@@ -1866,8 +1886,8 @@ register struct monst *mtmp;
             }
 
             if (mac < -1 && rn2(5) && !racial_giant(mtmp))
-                mac += 7 + mongets(mtmp, (rn2(5)) ? PLATE_MAIL
-                                                  : CRYSTAL_PLATE_MAIL);
+                mac += 7 + mongets(mtmp, (rn2(15)) ? PLATE_MAIL
+                                                   : CRYSTAL_PLATE_MAIL);
             else if (mac < 3 && rn2(5)
                        && (!(racial_giant(mtmp)
                              || racial_elf(mtmp) || racial_orc(mtmp))))
@@ -2078,6 +2098,14 @@ register struct monst *mtmp;
     case S_MUMMY:
         if (rn2(7))
             (void) mongets(mtmp, MUMMY_WRAPPING);
+        break;
+    case S_ORC:
+        if (ptr == &mons[PM_GOBLIN_KING]) {
+            (void) mongets(mtmp, QUARTERSTAFF);
+            struct obj* received = m_carrying(mtmp, QUARTERSTAFF);
+            if (received)
+                set_material(received, BONE);
+        }
         break;
     case S_QUANTMECH:
         if (!rn2(20) && ptr == &mons[PM_QUANTUM_MECHANIC]) {
@@ -2828,6 +2856,8 @@ long mmflags;
         mtmp->iscerberus = TRUE;
     } else if (mndx == PM_VECNA) {
         mtmp->isvecna = TRUE;
+    } else if (mndx == PM_GOBLIN_KING) {
+        mtmp->isgking = TRUE;
     } else if (mndx == PM_WIZARD_OF_YENDOR) {
         mtmp->iswiz = TRUE;
         context.no_of_wizards++;
@@ -3125,6 +3155,8 @@ rndmonst()
             if (Iniceq && !likes_iceq(ptr))
                 continue;
             if (!Iniceq && is_iceq_only(ptr))
+                continue;
+            if (Ingtown && !likes_gtown(ptr))
                 continue;
             ct = (int) (ptr->geno & G_FREQ) + align_shift(ptr);
 	    if (!is_mplayer(ptr))
@@ -3871,8 +3903,7 @@ register struct monst *mtmp;
             appear = Is_rogue_level(&u.uz) ? S_hwall : S_hcdoor;
         else
             appear = Is_rogue_level(&u.uz) ? S_vwall : S_vcdoor;
-    } else if ((IS_AIR(typ) && In_V_tower(&u.uz))
-               || is_pool_or_lava(mx, my)) {
+    } else if (is_open_air(mx, my) || is_pool_or_lava(mx, my)) {
         /* mimics cling to the ceiling over inaccessible terrain, but there's
          * no appropriate disguise that hangs from the ceiling */
         ap_type = M_AP_NOTHING;

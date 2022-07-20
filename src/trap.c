@@ -443,7 +443,7 @@ int x, y, typ;
         int dist;
         int lx, ly;
         int ok = 0;
-        for (d = 0; ((d < 8) && !ok); d++)
+        for (d = 0; ((d < 8) && !ok); d++) {
             for (dist = 1; ((dist < 8) && !ok); dist++) {
                 lx = x;
                 ly = y;
@@ -485,6 +485,7 @@ int x, y, typ;
                     ok = 1;
                 }
             }
+        }
         break;
     }
     case ROLLING_BOULDER_TRAP: /* boulder will roll towards trigger */
@@ -624,6 +625,11 @@ unsigned ftflags;
         int dist = newlevel - dunlev(&u.uz);
         dtmp.dnum = u.uz.dnum;
         dtmp.dlevel = newlevel;
+        /* prevent falling past mine town if the Goblin King
+           hasn't been defeated yet, eliminates awkward case
+           of being stuck between mine town and mines' end */
+        if (In_mines(&u.uz) && !u.uevent.ugking)
+            dist = 1;
         if (dist > 1)
             You("fall down a %s%sshaft!", dist > 3 ? "very " : "",
                 dist > 2 ? "deep " : "");
@@ -1164,9 +1170,10 @@ unsigned trflags;
         seetrap(trap);
         if (isok(trap->launch.x, trap->launch.y)
             && IS_STWALL(levl[trap->launch.x][trap->launch.y].typ)) {
-            buzz(trap->launch_otyp, 8,
-                 trap->launch.x, trap->launch.y,
-                 sgn(trap->tx - trap->launch.x), sgn(trap->ty - trap->launch.y));
+            dobuzz(trap->launch_otyp, 8,
+                   trap->launch.x, trap->launch.y,
+                   sgn(trap->tx - trap->launch.x),
+                   sgn(trap->ty - trap->launch.y), FALSE);
             trap->once = 1;
         } else {
             deltrap(trap);
@@ -1791,6 +1798,7 @@ unsigned trflags;
         } else if (thick_skinned(youmonst.data)) {
             pline("But it breaks off against your thick hide.");
             deltrap(trap);
+            newsym(u.ux, u.uy);
         } else if (unsolid(youmonst.data)) {
             pline("But it passes right through you!");
         } else {
@@ -1909,6 +1917,7 @@ struct obj *otmp;
         } else if (thick_skinned(steed->data)) {
             pline("But it breaks off against %s thick hide.", s_suffix(mon_nam(steed)));
             deltrap(trap);
+            newsym(steed->mx, steed->my);
         } else {
             trapkilled = thitm(0, steed, (struct obj*) 0, rnd(10) + 10, FALSE);
             steedhit = TRUE;
@@ -1965,7 +1974,9 @@ struct trap *trap;
 {
     int x = trap->tx, y = trap->ty, dbx, dby;
     struct rm *lev = &levl[x][y];
+    schar old_typ, typ;
 
+    old_typ = lev->typ;
     (void) scatter(x, y, 4,
                    MAY_DESTROY | MAY_HIT | MAY_FRACTURE | VIS_EFFECTS,
                    (struct obj *) 0);
@@ -1987,11 +1998,21 @@ struct trap *trap;
             /* no pits here */
             deltrap(trap);
         } else {
-            trap->ttyp = PIT;       /* explosion creates a pit */
-            trap->madeby_u = FALSE; /* resulting pit isn't yours */
-            seetrap(trap);          /* and it isn't concealed */
+            /* fill pit with water, if applicable */
+            typ = fillholetyp(x, y, FALSE);
+            if (typ != ROOM) {
+                lev->typ = typ;
+                liquid_flow(x, y, typ, trap,
+                            cansee(x, y) ? "The hole fills with %s!"
+                                         : (char *) 0);
+            } else {
+                trap->ttyp = PIT;       /* explosion creates a pit */
+                trap->madeby_u = FALSE; /* resulting pit isn't yours */
+                seetrap(trap);          /* and it isn't concealed */
+            }
         }
     }
+    spot_checks(x, y, old_typ);
 }
 
 /*
@@ -3102,6 +3123,7 @@ register struct monst *mtmp;
                 if (in_sight)
                     pline("But it breaks off against %s.", mon_nam(mtmp));
                 deltrap(trap);
+                newsym(mtmp->mx, mtmp->my);
             } else if (unsolid(mptr)) {
                 if (in_sight)
                     pline("It passes right through %s!", mon_nam(mtmp));
@@ -3119,15 +3141,17 @@ register struct monst *mtmp;
             }
             if (in_sight)
                 seetrap(trap);
-            if (isok(trap->launch.x,trap->launch.y)
+            if (isok(trap->launch.x, trap->launch.y)
                 && IS_STWALL(levl[trap->launch.x][trap->launch.y].typ)) {
                 buzz(trap->launch_otyp, 8,
                      trap->launch.x, trap->launch.y,
                      sgn(trap->tx - trap->launch.x), sgn(trap->ty - trap->launch.y));
                 trap->once = 1;
+                if (DEADMONSTER(mtmp))
+                    trapkilled = TRUE;
             } else {
                 deltrap(trap);
-                newsym(u.ux, u.uy);
+                newsym(mtmp->mx, mtmp->my);
             }
             break;
         case VIBRATING_SQUARE:
@@ -3397,6 +3421,7 @@ long hmask, emask; /* might cancel timeout */
 
     if (Punished && !carried(uball)
         && (is_damp_terrain(uball->ox, uball->oy)
+            || is_open_air(uball->ox, uball->oy)
             || ((trap = t_at(uball->ox, uball->oy))
                 && (is_pit(trap->ttyp) || is_hole(trap->ttyp))))) {
         u.ux0 = u.ux;
@@ -3445,7 +3470,7 @@ long hmask, emask; /* might cancel timeout */
             You("begin to tumble in place.");
         } else if (Is_waterlevel(&u.uz) && !no_msg) {
             You_feel("heavier.");
-        } else if (IS_AIR(levl[u.ux][u.uy].typ) && In_V_tower(&u.uz)
+        } else if (is_open_air(u.ux, u.uy)
             && !(u.usteed && (is_floater(u.usteed->data)
                               || is_flyer(u.usteed->data)))) {
             if (!Flying) {
@@ -4390,7 +4415,10 @@ drown()
 
     feel_newsym(u.ux, u.uy); /* in case Blind, map the water here */
     /* happily wading in the same contiguous pool */
-    if (u.uinwater && is_pool(u.ux - u.dx, u.uy - u.dy)
+    if (u.uinwater
+        && (is_pool(u.ux - u.dx, u.uy - u.dy)
+            || (is_damp_terrain(u.ux - u.dx, u.uy - u.dy)
+                && verysmall(youmonst.data)))
         && (Swimming || Amphibious)) {
         /* water effects on objects every now and then */
         if (!rn2(5))
@@ -4401,7 +4429,7 @@ drown()
 
     if (!u.uinwater) {
         You("%s into the %s%c", Is_waterlevel(&u.uz) ? "plunge" : "fall",
-            hliquid("water"),
+            hliquid(!is_sewage(u.ux, u.uy) ? "water" : "sewage"),
             Amphibious || Swimming ? '.' : '!');
         if (!Swimming && !Is_waterlevel(&u.uz))
             You("sink like %s.", Hallucination ? "the Titanic" : "a rock");
@@ -4486,12 +4514,14 @@ drown()
         }
     }
     /* one more scan */
-    for (x = u.ux - 1; x <= u.ux + 1; x++)
-        for (y = u.uy - 1; y <= u.uy + 1; y++)
+    for (x = u.ux - 1; x <= u.ux + 1; x++) {
+        for (y = u.uy - 1; y <= u.uy + 1; y++) {
             if (crawl_destination(x, y)) {
                 crawl_ok = TRUE;
                 goto crawl;
             }
+        }
+    }
 crawl:
     if (crawl_ok) {
         boolean lost = FALSE;
@@ -6082,7 +6112,7 @@ unconscious()
 
 /* Derived from lava_effects(), hero can burn in Gehennom
    without adequate fire resistance */
-static const char in_hell_killer[] = "burning in hell";
+static const char in_hell_killer[] = "the flames of hell";
 
 boolean
 in_hell_effects()
@@ -6105,7 +6135,7 @@ in_hell_effects()
                       rn2(2) ? "roasting" : "burning");
         if (usurvive) {
             losehp(dmg, in_hell_killer, KILLED_BY);
-            goto false;
+            return FALSE;
         }
 
         if (wizard)
@@ -6117,17 +6147,16 @@ in_hell_effects()
                      || u.umonnum == PM_BABY_SEA_DRAGON
                      || u.umonnum == PM_SEA_DRAGON
                      || u.umonnum == PM_FOG_CLOUD);
-        for (;;) {
-            u.uhp = -1;
-            killer.format = KILLED_BY;
-            Strcpy(killer.name, in_hell_killer);
-            You("%s...", boil_away ? "boil away" : "are roasted alive");
-            done(DIED);
-            break;
-        }
+
+        u.uhp = -1;
+        killer.format = KILLED_BY;
+        Strcpy(killer.name, in_hell_killer);
+        You("%s...", boil_away ? "boil away" : "are roasted alive");
+        done(DIED);
+
         return TRUE;
     }
-false:
+
     return FALSE;
 }
 
@@ -6154,7 +6183,7 @@ in_iceq_effects()
             You("are freezing to death!");
         if (usurvive) {
             losehp(dmg, in_iceq_killer, KILLED_BY);
-            goto false;
+            return FALSE;
         }
 
         if (wizard)
@@ -6166,17 +6195,16 @@ in_iceq_effects()
                         || u.umonnum == PM_BABY_SEA_DRAGON
                         || u.umonnum == PM_SEA_DRAGON
                         || u.umonnum == PM_FOG_CLOUD);
-        for (;;) {
-            u.uhp = -1;
-            killer.format = KILLED_BY;
-            Strcpy(killer.name, in_iceq_killer);
-            You("%s...", freeze_solid ? "freeze solid" : "freeze to death");
-            done(DIED);
-            break;
-        }
+
+        u.uhp = -1;
+        killer.format = KILLED_BY;
+        Strcpy(killer.name, in_iceq_killer);
+        You("%s...", freeze_solid ? "freeze solid" : "freeze to death");
+        done(DIED);
+
         return TRUE;
     }
-false:
+
     return FALSE;
 }
 
@@ -6412,6 +6440,23 @@ maybe_finish_sokoban()
             Sokoban = 0; /* clear level.flags.sokoban_rules */
             /* TODO: give some feedback about solving the sokoban puzzle
                (perhaps say "congratulations" in Japanese?) */
+        }
+    }
+}
+
+void
+trap_ice_effects(xchar x, xchar y, boolean ice_is_melting)
+{
+    struct trap *ttmp = t_at(x, y);
+
+    if (ttmp && ice_is_melting) {
+        if (ttmp->ttyp == LANDMINE || ttmp->ttyp == BEAR_TRAP) {
+            /* landmine or bear trap set on top of the ice falls
+               into the water */
+            int otyp = (ttmp->ttyp == LANDMINE) ? LAND_MINE : BEARTRAP;
+            cnv_trap_obj(otyp, 1, ttmp, TRUE);
+        } else {
+            deltrap(ttmp);
         }
     }
 }

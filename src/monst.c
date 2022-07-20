@@ -921,6 +921,16 @@ NEARDATA struct permonst mons[] = {
         SIZ(800, 200, MS_ORC, MZ_MEDIUM), MR_POISON, 0, M1_HUMANOID | M1_OMNIVORE,
         M2_COLLECT, M3_INFRAVISIBLE | M3_INFRAVISION | M3_ACCURATE, 0,
         MH_ORC, 8, CLR_WHITE),
+    MON("Goblin King", S_ORC,
+        LVL(8, 12, 7, 10, -15), (G_NOGEN | G_UNIQ),
+        A(ATTK(AT_WEAP, AD_PHYS, 2, 6), ATTK(AT_WEAP, AD_PHYS, 2, 6),
+          NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
+        SIZ(1500, 500, MS_CUSS, MZ_LARGE), MR_POISON, 0,
+        M1_HUMANOID | M1_OMNIVORE,
+        M2_NOPOLY | M2_HOSTILE | M2_STRONG | M2_STALK | M2_NASTY
+          | M2_MALE | M2_GREEDY | M2_JEWELS | M2_COLLECT | M2_MAGIC,
+        M3_WAITFORU | M3_INFRAVISION | M3_INFRAVISIBLE, 0,
+        MH_ORC, 10, CLR_BRIGHT_MAGENTA),
     /*
      * piercers
      */
@@ -3612,14 +3622,14 @@ struct permonst _mons2[] = {
     /*
      * lizards, &c
      */
-    MON("tortle", S_LIZARD, LVL(0, 8, 0, 0, 3), G_NOGEN, /* placeholder */
+    MON("tortle", S_LIZARD, LVL(0, 10, 0, 0, 3), G_NOGEN, /* placeholder */
         A(ATTK(AT_WEAP, AD_PHYS, 1, 6), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
           NO_ATTK),
-        SIZ(1200, 300, MS_HUMANOID, MZ_LARGE), 0, 0,
+        SIZ(1600, 400, MS_HUMANOID, MZ_LARGE), 0, 0,
         M1_HUMANOID | M1_THICK_HIDE | M1_OMNIVORE | M1_AMPHIBIOUS
             | M1_SWIM,
-        M2_NOPOLY | M2_STRONG | M2_COLLECT, M3_INFRAVISIBLE, 0,
-        MH_TORTLE, 2, CLR_CYAN),
+        M2_NOPOLY | M2_STRONG | M2_COLLECT, M3_INFRAVISIBLE,
+        M4_VULNERABLE_COLD, MH_TORTLE, 2, CLR_CYAN),
     MON("newt", S_LIZARD, LVL(0, 6, 8, 0, 0), (G_GENO | 5),
         A(ATTK(AT_BITE, AD_PHYS, 1, 2), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
           NO_ATTK),
@@ -3639,11 +3649,11 @@ struct permonst _mons2[] = {
     MON("sea tortle", S_LIZARD, LVL(2, 5, 0, 0, 3), (G_GENO | G_NOHELL | G_SGROUP | 1),
         A(ATTK(AT_WEAP, AD_PHYS, 1, 6), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
           NO_ATTK),
-        SIZ(1200, 300, MS_HUMANOID, MZ_LARGE), 0, 0,
+        SIZ(1600, 400, MS_HUMANOID, MZ_LARGE), 0, 0,
         M1_HUMANOID | M1_THICK_HIDE | M1_OMNIVORE | M1_AMPHIBIOUS
             | M1_SWIM,
-        M2_STRONG | M2_COLLECT, M3_INFRAVISIBLE, 0,
-        MH_TORTLE, 3, CLR_CYAN),
+        M2_STRONG | M2_COLLECT, M3_INFRAVISIBLE,
+        M4_VULNERABLE_COLD, MH_TORTLE, 3, CLR_CYAN),
     MON("baby crocodile", S_LIZARD, LVL(3, 6, 7, 0, 0), G_GENO,
         A(ATTK(AT_BITE, AD_PHYS, 1, 4), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
           NO_ATTK),
@@ -3658,11 +3668,11 @@ struct permonst _mons2[] = {
     MON("tortle shaman", S_LIZARD, LVL(5, 8, 0, 20, 5), (G_GENO | G_NOHELL),
         A(ATTK(AT_WEAP, AD_PHYS, 1, 4), ATTK(AT_MAGC, AD_CLRC, 0, 0),
           NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
-        SIZ(1200, 300, MS_HUMANOID, MZ_LARGE), 0, 0,
+        SIZ(1600, 400, MS_HUMANOID, MZ_LARGE), 0, 0,
         M1_HUMANOID | M1_THICK_HIDE | M1_OMNIVORE | M1_AMPHIBIOUS
             | M1_SWIM,
-        M2_STRONG | M2_MAGIC | M2_COLLECT, M3_INFRAVISIBLE, 0,
-        MH_TORTLE, 6, HI_ZAP),
+        M2_STRONG | M2_MAGIC | M2_COLLECT, M3_INFRAVISIBLE,
+        M4_VULNERABLE_COLD, MH_TORTLE, 6, HI_ZAP),
     MON("chameleon", S_LIZARD, LVL(6, 5, 6, 10, 0), (G_GENO | 2),
         A(ATTK(AT_BITE, AD_PHYS, 4, 2), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
           NO_ATTK),
@@ -3677,13 +3687,14 @@ struct permonst _mons2[] = {
             | M1_OVIPAROUS | M1_CARNIVORE,
         M2_STRONG | M2_HOSTILE, 0, 0, 0, 7, CLR_BROWN),
     /* From SporkHack */
-    MON("giant turtle", S_LIZARD, LVL(7, 2, -8, 10, 0), (G_GENO | 1),
+    MON("giant turtle", S_LIZARD, LVL(7, 2, -8, 10, 0), (G_GENO | G_NOHELL | 1),
         A(ATTK(AT_BITE, AD_PHYS, 4, 6),
           NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
         SIZ(4000, 1200, MS_HISS, MZ_HUGE), MR_STONE, MR_STONE,
         M1_ANIMAL | M1_THICK_HIDE | M1_NOHANDS | M1_HERBIVORE
             | M1_AMPHIBIOUS | M1_SWIM,
-        M2_HOSTILE | M2_STRONG, 0, 0, 0, 8, CLR_BRIGHT_GREEN),
+        M2_HOSTILE | M2_STRONG, 0,
+        M4_VULNERABLE_COLD, 0, 8, CLR_BRIGHT_GREEN),
     MON("salamander", S_LIZARD, LVL(8, 12, -1, 0, -9), (G_HELL | 1),
         A(ATTK(AT_WEAP, AD_PHYS, 2, 8), ATTK(AT_TUCH, AD_FIRE, 1, 6),
           ATTK(AT_HUGS, AD_FIRE, 3, 6), ATTK(AT_HUGS, AD_WRAP, 2, 6),
@@ -4043,18 +4054,6 @@ struct permonst _mons2[] = {
             | M2_PNAME | M2_ROCKTHROW | M2_GREEDY | M2_JEWELS | M2_MAGIC,
         M3_WANTSARTI | M3_WAITFORU | M3_INFRAVISIBLE | M3_BERSERK,
         0, MH_GIANT, 23, HI_LORD),
-#if 0 /* OBSOLETE */
-    MON("Goblin King", S_ORC,
-        LVL(15, 12, 10, 0, -15), (G_NOGEN | G_UNIQ),
-        A(ATTK(AT_WEAP, AD_PHYS, 2, 6), ATTK(AT_WEAP, AD_PHYS, 2, 6),
-          ATTK(AT_CLAW, AD_SAMU, 1, 6), NO_ATTK, NO_ATTK, NO_ATTK),
-        SIZ(750, 350, MS_NEMESIS, MZ_HUMAN), MR_POISON, 0,
-        M1_HUMANOID | M1_OMNIVORE,
-        M2_NOPOLY | M2_HOSTILE | M2_STRONG | M2_STALK | M2_NASTY
-          | M2_MALE | M2_GREEDY | M2_JEWELS | M2_COLLECT | M2_MAGIC,
-        M3_WANTSARTI | M3_WAITFORU | M3_INFRAVISION | M3_INFRAVISIBLE, 0,
-        MH_ORC, 18, HI_LORD),
-#endif
     MON("Warden Arianna", S_HUMAN, LVL(20, 12, 0, 40, -14), (G_NOGEN | G_UNIQ | G_NOCORPSE),
         A(ATTK(AT_WEAP, AD_PHYS, 1, 25), ATTK(AT_WEAP, AD_PHYS, 1, 25),
           ATTK(AT_CLAW, AD_SAMU, 1, 6), NO_ATTK, NO_ATTK, NO_ATTK),

@@ -1290,7 +1290,7 @@ The following changes to date are:
 - Kathryn the Enchantress will still wave to you if hostile
 - Fix: the Oracle and Charon changed states not restored on save
 - Fix: better fix for crash when killing monster with a wielded potion
-- Fix: thrown/kicked objects hitting a black dragon would disintigrate 100%
+- Fix: thrown/kicked objects hitting a black dragon would disintegrate 100%
   of the time
 - Fix: check_wings() doesn't respect if an amulet of flying is being worn or not
 - Fix: Illithids can still use psionic blast if poly'd into a non-illithid form
@@ -2229,4 +2229,167 @@ The following changes to date are:
 - Fix: polymorphing into a red dragon no matter what type of dragon scales
   are being worn
 - Fix: crash when over-enchanting worn armor
+- Fix: add message for failed fountain monster detection
+- New branch: Goblin Town
+- Prevent falling down past Mine Town if the Goblin King has not been
+  defeated yet
+- Fix: remove Goblin King template from quest nemesis block
+- Tortle encyclopedia entry
+- Add goblin shaman monster to Goblin Town
+- Only certain types of monsters can randomly spawn in Goblin Town
+- Tortles are not slowed when walking through sewage
+- Tortles and giant turtles are vulnerable to cold-based attacks
+- Player can create various types of armor and weapons using a forge
+- Fix: tweaks to initial forging commit
+- Fix: incorrect feedback with attacking monsters weapon resisting
+  passive cancellation
+- More tweaks to forging
+- The Blacksmith's Cookbook
+- Fix: improper feedback when a monster spellcaster destroys a secret
+  door with fire/ice bolt spell
+- Fix: improper death reason when killed by a thrown potion of oil
+- Fix: end of game crash if killed by a lit thrown/scattered potion
+  of oil before the potion could explode
+- Fix: accessing freed memory after charging causes a ring to explode
+- Tortles are not affected by turbulence whilst swimming
+- Ensure tortles don't receive regular gear sacrifice gifts they can't use
+- Tortles have a chance of spawning with an oilskin sack
+- Corrections to commit concerning sacrifice gifts and tortles
+- Make tortles immune to various attacks while in their shell
+- Tortles gradually gain AC as they level up
+- Fix: monster steed not properly released if rider is turned into a 
+  mind flayer (mind flayer larva attack)
+- More tortle tweaks - cooldown timer change for going back into shell,
+  immune to bullwhip/bearded axe disarm while in shell
+- Unintelligent monsters could ignore tortle hiding in its shell from a
+  distance
+- Fix: polymorphed Tortle werejackal has protective shell (issue #94)
+- Fix: livelog reporting of various unique monsters
+- Fix: livelog reporting of sacrifice gift that had a quantity larger
+  than one
+- Tweak to latest sacrifice gift livelog fix
+- As a tortle, show enshellment via enlightenment and death reason
+- Prevent tortle monks from using random kick attack against
+  certain targets
+- Fix: priest tortle couldn't wear the Mitre of Holiness
+- Allow helm of speed to be made of more materials
+- Give tortles a slightly higher weight carry cap
+- Fix: weight of forged object could sometimes be incorrect
+- Fix: forging and object properties, stacks
+- Include player name in the title of HTML dumplogs
+- Fix: in_hell_effects() and in_iceq_effects()
+- Fix: Vecna wasn't always dropping its artifact
+- Allow Dirge to slice through iron bars
+- Tortle enshelling improvements
+- Aklys improvements
+- Goblin Town tweaks.
+- More Goblin Town tweaks, defeating boss monster feedback
+- Fix: re-enable gnome's default #chat sound
+- Cursed wand of make invisible makes target visible
+- Remove non-Knight reflection restrictions for the Magic Mirror of Merlin
+- Prevent covetous monsters from riding other monsters
+- Remove restriction of casting targeted/area of effect spells on
+  the plane of water
+- Prevent non-wizards from receiving a cornuthaum as a sacrifice gift
+- Change critera for which body armor is allowed to be worn whilst
+  having wings
+- Fix: magic beam trap hit/miss feedback when target is unseen
+- Illithids now 'force learn' psionic wave instead of starting with a
+  spellbook of it
+- Adjust blocked access to Mine Town/Mines' End while Goblin King is alive
+- Fix: two-weapon paralysis
+- Fix: update to 'two-weapon paralysis' commit
+- Include tortle race in shopkeeper price adjustments
+- Add chance for doors on jail cells in Goblin Town; adjust odds for shop
+  and hammer spawning
+- Enshelled tortle blocks stinging/crushing attacks
+- Change 'splash of acid' to 'torrent of acid'
+- Forge recipe improvements, slight recipe changes
+- Fix: saving versus ball & chain
+- Fix: a couple typos
+- Eating the Hand of Vecna is bad for you
+- Fix: the Hand of Vecna could disappear if the game is saved/reloaded after
+  attempting to over-enchant
+- Fix: 'qt_pager: message 90 not found. program in disorder!' during
+  Rogue quest
+- Fix: suppress Monk's extra kick attack when engulfed
+- Give notice to infidels why they aren't regenerating hit points when
+  they don't have the Amulet of Yendor in their possession
+- Fix: prevent sokoban prizes from being engulfed
+- Fix: certain forge recipes could cause splitobj panic
+- Additional forge recipes, tweaks to a few existing recipes
+- Adjust tortle movement speed
+- Make crystal plate mail more rare
+- Fix: 'Your leather studded armor seems to have holes for wings' when
+  putting on dragonhide studded armor
+- Fix: saving follow up
+- Lower 'confuse monster' spell from level 2 to 1, make it part of a
+  Monk's starting spell selection
+- Fix: enchant armor selection and dragon scales; wishing for dragon
+  scale mail
+- Fix: What weird race is this? (Dem) Program in disorder!
+- Fix: follow up to commit b616c1c
+- Fix: melting ice timeout issues
+- Fix: extract_nobj: object lost (magic beam traps)
+- Enshelled tortles are supposed to be harder to hit
+- Fix: failure restoring embedded dragon scales
+- Fix: end of game crash during bones creation under certain conditions
+- Fix: inconsistencies with illithids and psionic attack feedback
+- Fix: Hand of Vecna cold damage should only apply to hand-to-hand combat
+- Fix: nurse healing attack whilst 'wearing' nothing but the Hand of Vecna
+- Switch heavy war hammer to regular war hammer (Goblin Town)
+- Fix: correct feedback trying to genocide liches via throne genocide
+- Fix: farlook information for monster steeds ridden by unseen rider 
+- Allow barding to be forged
+- Fix: quest leader not appearing when wishing for a quest artifact
+- Fix: all unlocking tools being treated as magic when unlocking a
+  trapped container
+- Fix: bad grammar trying to put barding on a monster you can't
+- Fix: non-zap buglets / oil burning secret door described as spell
+- Successful spellcasting helps in remembering the spell cast
+- Fix: follow up to 'oil burning secret door described as spell'
+- Enshelled tortles are immune to most bite attacks
+- Fix: reading scroll of enchant armor while confused and wearing dragon
+  scales
+- Fix: more blast vs spell
+- Fix: could not dip worn rings while 'wearing' the Hand of Vecna
+- Fix: remove unnecessary line in xkilled()
+- Fix: alignment adjustment when casting 'cure sickness' on diseased
+  tame or peaceful monsters
+- Denote gender when a monster tries to disarm with a bearded axe
+- Fix: typo/omission in hints files
+- Create is_open_air() function
+- Fix: prevent player from hiding their quest artifact in a container to
+  avoid interaction with quest leader
+- Fix: couple of revive() bits
+- Allow intrinsic gain from pet's digestion attack
+- Fix: pushing boulders, ball & chain handling in Vlad's cavern
+- Fix: shallow water not drying up from objects being dropped into them
+- Fix: metalvores eating a metal container would also consume all contents
+- Fix: run travel was not stopping at terrain/objects of interest
+- Fix: a couple more ball & chain in open air fixes
+- Fix: saving/freeing ball and chain
+- Fix: prevent 'oilskin oilskin cloak'
+- Fix: crash/memory leak with thrown/falling boulders in Vlad's cavern
+- Fix: prevent tame vampires from shifting back into animal/fog form
+- Fix: Rider revival without corpse removal
+- Update README file (install instructions), tweak a couple hints files
+- Fix: cross-aligned player priests blasted by crowning gift weapon
+  (Mjollnir)
+- Fix: passive green slime attack not active
+- Make looting less tedious
+- Add new #wizkill command
+- Don't allow fuzzer mode to use #wizkill 
+- Fix: spawning giant <monster> in wizmode
+- Fix: filename buffer overflow
+- Monsters that gain resistance to a type of damage also lose any
+  vulnerability to the same damage type
+- Fix: foo, poisoned by a cursed amulet of life saving
+- Adjust shambling horror attack/damage type combinations
+- Fix: memory corruption issues caught with address sanitizer
+- Fix: don't use 'zombified' as a death reason for player races that
+  can't turn into zombies
+- Fix: very small monsters (and players) vs shallow water/sewage
+- Fix: poisonous corpse can give conflicting message (issue #95)
+- Fix: remove unnecessary feedback when a monster goes berserk
 

@@ -228,7 +228,7 @@ in_trouble()
         || stuck_ring(uleft, RIN_LEVITATION)
         || stuck_ring(uright, RIN_LEVITATION))
         return TROUBLE_CURSED_LEVITATION;
-    if (nohands(youmonst.data) || (!freehand() && !Hidinshell)) {
+    if (nohands(youmonst.data) || !freehand()) {
         /* for bag/box access [cf use_container()]...
            make sure it's a case that we know how to handle;
            otherwise "fix all troubles" would get stuck in a loop */
@@ -488,7 +488,7 @@ int trouble;
                 goto decurse;
             }
         }
-        if (nohands(youmonst.data) || (!freehand() && !Hidinshell))
+        if (nohands(youmonst.data) || !freehand())
             impossible("fix_worst_trouble: couldn't cure hands.");
         break;
     case TROUBLE_CURSED_BLINDFOLD:
@@ -2283,18 +2283,21 @@ dosacrifice()
                     } else { /* Making armor */
                         do {
                             /* even chance for each slot
-                             * giants are evenly distributed among armor they can wear
-                             * monks and centaurs end up more likely to receive certain
-                             * kinds, but them's the breaks */
-                            switch (Race_if(PM_GIANT) ? rn1(4, 2) : rn2(6)) {
+                               giants and tortles are evenly distributed among armor
+                               they can wear. monks and centaurs end up more likely
+                               to receive certain kinds, but them's the breaks */
+                            switch (Race_if(PM_GIANT) ? rn1(4, 2)
+                                                      : Race_if(PM_TORTLE) ? rn1(3, 3)
+                                                                           : rn2(6)) {
                             case 0:
                                 /* body armor (inc. shirts) */
-                                if (primary_casters || primary_casters_priest)
+                                if (primary_casters || primary_casters_priest) {
                                     typ = rn2(2) ? rnd_class(ARMOR, JACKET)
                                                  : rn2(6) ? typ == STUDDED_ARMOR
                                                           : typ == CRYSTAL_PLATE_MAIL;
-                                else
+                                } else {
                                     typ = rnd_class(PLATE_MAIL, T_SHIRT);
+                                }
                                 if (!Role_if(PM_MONK)
                                     || (typ == T_SHIRT || typ == HAWAIIAN_SHIRT)) {
                                     break; /* monks only can have shirts */
@@ -2306,43 +2309,65 @@ dosacrifice()
                                 break;
                             case 2:
                                 /* boots */
-                                if (primary_casters || primary_casters_priest)
+                                if (primary_casters || primary_casters_priest) {
                                     typ = !rn2(3) ? typ == LOW_BOOTS
                                                   : rnd_class(HIGH_BOOTS, LEVITATION_BOOTS);
-                                else
+                                } else {
                                     typ = rnd_class(LOW_BOOTS, LEVITATION_BOOTS);
+                                }
                                 if (!Race_if(PM_CENTAUR)) {
                                     break;
                                 } /* centaurs have double chances to get a shield */
                                 /* FALLTHRU */
                             case 3:
                                 /* shield */
-                                if (primary_casters || primary_casters_priest)
+                                if (primary_casters || primary_casters_priest) {
                                     typ = rn2(8) ? typ == SMALL_SHIELD
                                                  : rnd_class(SHIELD_OF_REFLECTION, SHIELD_OF_MOBILITY);
-                                else
+                                } else {
                                     typ = rnd_class(SMALL_SHIELD, SHIELD_OF_MOBILITY);
+                                }
                                 if (!Role_if(PM_MONK)) {
                                     break;
                                 } /* monks have double chances to get gloves */
                                 /* FALLTHRU */
                             case 4:
                                 /* gloves */
-                                if (primary_casters || primary_casters_priest)
+                                if ((primary_casters || primary_casters_priest)
+                                    && !Race_if(PM_TORTLE)) {
                                     typ = rn2(3) ? typ == GLOVES
                                                  : rnd_class(GAUNTLETS_OF_POWER,
                                                              GAUNTLETS_OF_DEXTERITY);
-                                else
+                                } else if (Race_if(PM_TORTLE)) {
+                                    typ = rn2(3) ? typ == GLOVES
+                                                 : rnd_class(GAUNTLETS_OF_PROTECTION,
+                                                             GAUNTLETS_OF_DEXTERITY);
+                                } else {
                                     typ = rnd_class(GLOVES, GAUNTLETS_OF_DEXTERITY);
+                                }
                                 break;
                             case 5:
                                 /* helm */
-                                if (primary_casters || primary_casters_priest)
-                                    typ = rn2(2) ? rnd_class(CORNUTHAUM, ELVEN_HELM)
-                                                 : rnd_class(HELM_OF_BRILLIANCE,
-                                                             HELM_OF_TELEPATHY);
-                                else
+                                if ((primary_casters || primary_casters_priest)
+                                    && !Race_if(PM_TORTLE)) {
+                                    if (Role_if(PM_WIZARD)) {
+                                        typ = rn2(2) ? rnd_class(CORNUTHAUM, ELVEN_HELM)
+                                                     : rnd_class(HELM_OF_BRILLIANCE,
+                                                                 HELM_OF_TELEPATHY);
+                                    } else {
+                                        typ = rn2(2) ? rnd_class(FEDORA, ELVEN_HELM)
+                                                     : rnd_class(HELM_OF_BRILLIANCE,
+                                                                 HELM_OF_TELEPATHY);
+                                    }
+                                } else if (Race_if(PM_TORTLE)) {
+                                    if (Role_if(PM_WIZARD)) {
+                                        typ = rnd_class(CORNUTHAUM, ELVEN_HELM);
+                                    } else {
+                                        typ = rnd_class(FEDORA, ELVEN_HELM);
+                                    }
+                                } else {
                                     typ = rnd_class(ELVEN_HELM, HELM_OF_TELEPATHY);
+                                }
                                 break;
                             default:
                                 typ = HAWAIIAN_SHIRT; /* Ace Ventura approved. Alrighty then. */
@@ -2420,7 +2445,8 @@ dosacrifice()
                             otmp->spe = rn2(3) + 3; /* +3 to +5 */
                             otmp->oerodeproof = TRUE;
                             otmp->owt = weight(otmp);
-                            at_your_feet("An object");
+                            at_your_feet(otmp->quan > 1L ? "Some objects"
+                                                         : "An object");
                             place_object(otmp, u.ux, u.uy);
                             newsym(u.ux, u.uy);
                             if (altaralign == A_NONE)
@@ -2438,8 +2464,7 @@ dosacrifice()
                             }
                             livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT,
                                            "had %s entrusted to %s by %s",
-                                           an(xname(otmp)), uhim(),
-                                           u_gname());
+                                           doname(otmp), uhim(), u_gname());
                             return 1;
                         }
                     }

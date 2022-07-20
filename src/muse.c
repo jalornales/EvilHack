@@ -3002,7 +3002,7 @@ struct monst *mtmp;
             if (vismon)
                 pline("%s flicks a bullwhip towards your %s!", Monnam(mtmp),
                       hand);
-            if (obj->otyp == HEAVY_IRON_BALL) {
+            if (obj->otyp == HEAVY_IRON_BALL || Hidinshell) {
                 pline("%s fails to wrap around %s.", The_whip, the_weapon);
                 return 1;
             }
@@ -3066,9 +3066,9 @@ struct monst *mtmp;
                 hand = makeplural(hand);
 
             if (vismon)
-                pline("%s swings its axe towards your %s!", Monnam(mtmp),
-                      hand);
-            if (obj->otyp == HEAVY_IRON_BALL) {
+                pline("%s swings %s axe towards your %s!", Monnam(mtmp),
+                      mhis(mtmp), hand);
+            if (obj->otyp == HEAVY_IRON_BALL || Hidinshell) {
                 pline("%s glances off of %s.", The_axe, the_weapon);
                 return 1;
             }
@@ -3133,9 +3133,9 @@ struct monst *mtmp;
                 hand = makeplural(hand);
 
             if (vismon)
-                pline("%s swings its axe towards your off%s!", Monnam(mtmp),
-                      hand);
-            if (is_flimsy(obj)) {
+                pline("%s swings %s axe towards your off%s!", Monnam(mtmp),
+                      mhis(mtmp), hand);
+            if (is_flimsy(obj) || Hidinshell) {
                 pline("%s is unable to hook onto %s.", The_axe, the_shield);
                 return 1;
             }

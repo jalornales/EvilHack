@@ -65,7 +65,9 @@ long gpflags;
             return FALSE;
 
         mdat = mtmp->data;
-        if (is_pool(x, y) && !ignorewater) {
+        if (!ignorewater
+            && (is_pool(x, y) || ((is_puddle(x, y) || is_sewage(x, y))
+                                  && vs_cantflyorswim(mtmp->data)))) {
             /* [what about Breathless?] */
             if (mtmp == &youmonst)
                 return (Swimming || Amphibious
@@ -95,7 +97,7 @@ long gpflags;
                 return (is_floater(mdat) || is_flyer(mdat)
                         || likes_lava(mdat));
         }
-        if (IS_AIR(levl[x][y].typ) && In_V_tower(&u.uz) && !ignoreair)
+        if (is_open_air(x, y) && !ignoreair)
             return (is_flyer(mdat) || is_floater(mdat) || is_clinger(mdat));
         if (passes_walls(mdat) && may_passwall(x, y))
             return TRUE;
@@ -108,7 +110,7 @@ long gpflags;
     if (!accessible(x, y)) {
         if (!(is_pool(x, y) && ignorewater)
             && !(is_lava(x, y) && ignorelava)
-            && !(IS_AIR(levl[x][y].typ) && In_V_tower(&u.uz) && ignoreair))
+            && !(is_open_air(x, y) && ignoreair))
             return FALSE;
     }
 
@@ -968,7 +970,7 @@ level_tele()
          * but once he is defeated, the ability opens back up */
         if (newlev > 0 && !force_dest
             && ((Is_valley(&u.uz) && !u.uevent.ucerberus
-                 && (!wizard || yn("Cerberus is alive. Override?") != 'y'))
+                 && (!wizard || yn("Cerberus is alive.  Override?") != 'y'))
                 || Is_knox(&u.uz))) {
             You1(shudder_for_moment);
             return;

@@ -1317,6 +1317,7 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
             if (nutrit > 1)
                 nutrit /= 2;
             EDOG(magr)->hungrytime += nutrit;
+            dog_givit(magr, pd);
         }
         break;
     }
@@ -2212,10 +2213,17 @@ msickness:
                                   Monnam(magr), s_suffix(the(mon_nam(mdef))));
                         }
                         if (!mlifesaver(mdef)) {
+                            boolean tamer = magr->mtame;
+                            if (!tamer && mdef->mtame) {
+                                mdef->mpeaceful = magr->mpeaceful;
+                                mdef->mtame = 0;
+                            }
                             mongone(magr); /* mind flayer larva transforms */
                             become_flayer(mdef);
-                            return (MM_DEF_DIED | (grow_up(magr, mdef) ? 0 : MM_AGR_DIED));
-                            break;
+                            if (tamer)
+                                (void) tamedog(mdef, (struct obj *) 0);
+                            return (MM_DEF_DIED
+                                    | (grow_up(magr, mdef) ? 0 : MM_AGR_DIED));
                         } else {
                             tmp = mdef->mhp;
                         }
@@ -2826,6 +2834,32 @@ struct obj *mwep;
                       s_suffix(Monnam(mdef)), mon_nam(magr));
             (void) cancel_monst(magr, mwep, FALSE, TRUE, FALSE);
         }
+        break;
+    case AD_SLIM:
+        if (mhit && !mdef->mcan && !rn2(3)) {
+            pline("Its slime splashes onto %s!", mon_nam(magr));
+            if (flaming(magr->data)) {
+                pline_The("slime burns away!");
+                tmp = 0;
+            } else if (slimeproof(magr->data)) {
+                pline("%s is unaffected.", Monnam(magr));
+                tmp = 0;
+            } else if (!rn2(4) && !slimeproof(magr->data)) {
+                if (!munslime(magr, FALSE) && !DEADMONSTER(magr)) {
+                    if (newcham(magr, &mons[PM_GREEN_SLIME], FALSE,
+                                (boolean) (vis && canseemon(magr))))
+                    magr->mstrategy &= ~STRAT_WAITFORU;
+                }
+                /* munslime attempt could have been fatal,
+                   potentially to multiple monsters (SCR_FIRE) */
+                if (DEADMONSTER(magr))
+                    return (mdead | mhit | MM_AGR_DIED);
+                if (DEADMONSTER(mdef))
+                    return (mdead | mhit | MM_DEF_DIED);
+                tmp = 0;
+            }
+        }
+        break;
     default:
         break;
     }

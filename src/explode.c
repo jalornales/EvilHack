@@ -85,6 +85,12 @@ int expltype;
         default:
             break;
         }
+    } else if (olet == BURNING_OIL) {
+        /* used to provide extra information to zap_over_floor() */
+        exploding_wand_typ = POT_OIL;
+    } else if (olet == SCROLL_CLASS) {
+        /* ditto */
+        exploding_wand_typ = SCR_FIRE;
     }
     /* muse_unslime: SCR_FIRE */
     if (expltype < 0) {
@@ -166,7 +172,7 @@ int expltype;
             adtyp = AD_DRST;
             break;
         case 7:
-            adstr = "splash of acid";
+            adstr = "torrent of acid";
             adtyp = AD_ACID;
             break;
         default:
@@ -594,6 +600,9 @@ int expltype;
                 } else if (adtyp == AD_FIRE && olet == FORGE_EXPLODE) {
                     killer.format = KILLED_BY_AN;
                     Strcpy(killer.name, str);
+                } else if (adtyp == AD_FIRE && olet == BURNING_OIL) {
+                    killer.format = KILLED_BY_AN;
+                    Sprintf(killer.name, "exploding fire bomb");
                 } else if (type >= 0 && olet != SCROLL_CLASS) {
                     killer.format = NO_KILLER_PREFIX;
                     Sprintf(killer.name, "caught %sself in %s own %s", uhim(),
@@ -767,6 +776,7 @@ struct obj *obj; /* only scatter this obj        */
     while (farthest-- > 0) {
         for (stmp = schain; stmp; stmp = stmp->next) {
             if ((stmp->range-- > 0) && (!stmp->stopped)) {
+                thrownobj = stmp->obj; /* mainly in case it kills hero */
                 bhitpos.x = stmp->ox + stmp->dx;
                 bhitpos.y = stmp->oy + stmp->dy;
                 typ = levl[bhitpos.x][bhitpos.y].typ;
@@ -813,6 +823,10 @@ struct obj *obj; /* only scatter this obj        */
                 }
                 stmp->ox = bhitpos.x;
                 stmp->oy = bhitpos.y;
+                if (IS_SINK(levl[stmp->ox][stmp->oy].typ)
+                    || IS_FORGE(levl[stmp->ox][stmp->oy].typ))
+                    stmp->stopped = TRUE;
+                thrownobj = (struct obj *) 0;
             }
         }
     }

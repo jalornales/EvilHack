@@ -224,7 +224,7 @@ struct attack *mattk;
         if (!flags.verbose || (!nearmiss && !blocker)) {
             pline("%s misses.", Monnam(mtmp));
         } else if (nearmiss || !blocker) {
-            if ((thick_skinned(youmonst.data) || Race_if(PM_TORTLE))
+            if ((thick_skinned(youmonst.data) || (!Upolyd && Race_if(PM_TORTLE)))
                 && rn2(2)) {
                 Your("%s %s %s attack.",
                      (is_dragon(youmonst.data) ? "scaly hide"
@@ -235,9 +235,13 @@ struct attack *mattk;
                       (rn2(2) ? "blocks" : "deflects"),
                       s_suffix(mon_nam(mtmp)));
             } else {
-                rn2(2) ? You("dodge %s attack!", s_suffix(mon_nam(mtmp)))
-                       : rn2(2) ? You("evade %s attack!", s_suffix(mon_nam(mtmp)))
-                                : pline("%s narrowly misses!", Monnam(mtmp));
+                if (Race_if(PM_TORTLE)) {
+                    pline("%s narrowly misses!", Monnam(mtmp));
+                } else {
+                    rn2(2) ? You("dodge %s attack!", s_suffix(mon_nam(mtmp)))
+                           : rn2(2) ? You("evade %s attack!", s_suffix(mon_nam(mtmp)))
+                                    : pline("%s narrowly misses!", Monnam(mtmp));
+                }
             }
         } else if (blocker == &zeroobj) {
             pline("%s is stopped by your golden haze.", Monnam(mtmp));
@@ -807,7 +811,9 @@ register struct monst *mtmp;
         tmp -= 2;
     if ((has_erac(mtmp) && (ERAC(mtmp)->mflags3 & M3_ACCURATE))
         || is_accurate(mdat)) /* M3_ACCURATE monsters get a to-hit bonus */
-        tmp += 5;
+        tmp += Hidinshell ? 0 : 5;
+    if (Hidinshell) /* enshelled tortles are much harder to hit */
+        tmp -= 12;
     if (tmp <= 0)
         tmp = 1;
 
@@ -927,10 +933,27 @@ register struct monst *mtmp;
                         && (youmonst.data)->msize <= MZ_SMALL
                         && is_animal(youmonst.data)
                         && (near_capacity() == UNENCUMBERED)
-                        && !(Confusion || Stunned || Punished
+                        && !(Confusion || Stunned || Punished || multi < 0
                              || Wounded_legs || Stoned || Fumbling) && rn2(3)) {
                         You("nimbly %s %s bite!",
                             rn2(2) ? "dodge" : "evade", s_suffix(mon_nam(mtmp)));
+                        return 0;
+                    }
+                    if (mdat->msize <= MZ_LARGE && mattk->aatyp == AT_BITE
+                        && Hidinshell) {
+                        Your("protective shell blocks %s bite!",
+                             s_suffix(mon_nam(mtmp)));
+                        return 0;
+                    }
+                    if (is_illithid(mdat) && mattk->aatyp == AT_TENT
+                        && Hidinshell) {
+                        Your("protective shell blocks %s tentacle attack!",
+                             s_suffix(mon_nam(mtmp)));
+                        return 0;
+                    }
+                    if (mattk->aatyp == AT_STNG && Hidinshell) {
+                        pline("%s stinger glances off of your protective shell!",
+                              s_suffix(Monnam(mtmp)));
                         return 0;
                     }
                     if (tmp > (j = rnd(20 + i))) {
@@ -1347,10 +1370,17 @@ register struct attack *mattk;
                         pline("%s grabs you!", Monnam(mtmp));
                 }
             } else if (u.ustuck == mtmp) {
-                exercise(A_STR, FALSE);
-                You("are being %s.", (mtmp->data == &mons[PM_ROPE_GOLEM])
-                                         ? "choked"
-                                         : "crushed");
+                if (Hidinshell) {
+                    /* monster still has you in its grasp, but is unable
+                       to cause any damage */
+                    Your("protective shell prevents you from being crushed!");
+                    dmg = 0;
+                } else {
+                    exercise(A_STR, FALSE);
+                    You("are being %s.", (mtmp->data == &mons[PM_ROPE_GOLEM])
+                                             ? "choked"
+                                             : "crushed");
+                }
             } else {
                 hitmsg(mtmp, mattk);
             }
@@ -1598,7 +1628,7 @@ register struct attack *mattk;
             break;
         }
 
-        if (!Upolyd && Race_if(PM_ILLITHID) && !is_zombie(mdat)) {
+        if (is_illithid(youmonst.data) && !is_zombie(mdat)) {
             Your("psionic abilities shield your brain.");
             break;
         }
@@ -1626,7 +1656,7 @@ register struct attack *mattk;
                 break;
         }
         /* adjattrib gives dunce cap message when appropriate */
-        if (Race_if(PM_ILLITHID)) {
+        if (is_illithid(youmonst.data)) {
             if (!rn2(3))
                 Your("psionic abilities shield your brain from memory loss.");
             break;
@@ -1867,13 +1897,14 @@ register struct attack *mattk;
         hitmsg(mtmp, mattk);
         if (youmonst.data->mlet == mdat->mlet)
             break;
-        if (!mtmp->mcan)
+        if (!(mtmp->mcan || Hidinshell))
             stealgold(mtmp);
         break;
 
     case AD_SSEX:
         if (SYSOPT_SEDUCE) {
-            if (could_seduce(mtmp, &youmonst, mattk) == 1 && !mtmp->mcan)
+            if (could_seduce(mtmp, &youmonst, mattk) == 1
+                && !(mtmp->mcan || Hidinshell))
                 if (doseduce(mtmp))
                     return 3;
             break;
@@ -1884,7 +1915,7 @@ register struct attack *mattk;
         int is_robber = (is_animal(mtmp->data) || is_rogue(mtmp->data));
         if (is_robber) {
             hitmsg(mtmp, mattk);
-            if (mtmp->mcan)
+            if (mtmp->mcan || Hidinshell)
                 break;
             /* Continue below */
         } else if (dmgtype(youmonst.data, AD_SEDU)
@@ -1900,7 +1931,7 @@ register struct attack *mattk;
             if (!tele_restrict(mtmp))
                 (void) rloc(mtmp, TRUE);
             return 3;
-        } else if (mtmp->mcan) {
+        } else if (mtmp->mcan || Hidinshell) {
             if (!Blind)
                 pline("%s tries to %s you, but you seem %s.",
                       Adjmonnam(mtmp, "plain"),
@@ -1937,6 +1968,8 @@ register struct attack *mattk;
         /* when the Wizard or quest nemesis hits, there's a 1/20 chance
            to steal a quest artifact (any, not just the one for the hero's
            own role) or the Amulet or one of the invocation tools */
+        if (Hidinshell)
+            break;
         if (!rn2(20)) {
             stealamulet(mtmp);
             if (In_endgame(&u.uz) && mon_has_amulet(mtmp)) {
@@ -2040,7 +2073,8 @@ do_rust:
             break;
         }
         if (!uwep && !uarmu && !uarm && !uarmc
-            && !uarms && !uarmg && !uarmf && !uarmh) {
+            && !uarms && !uarmf && !uarmh
+            && (!uarmg || (uarmg && uarmg->oartifact == ART_HAND_OF_VECNA))) {
             boolean goaway = FALSE;
 
             pline("%s touches you!  (I hope you don't mind.)", Monnam(mtmp));
@@ -2270,6 +2304,11 @@ do_rust:
             if (noncorporeal(youmonst.data) || amorphous(youmonst.data)) {
                 pline("%s slices through your %s.",
                       Monnam(mtmp), body_part(NECK));
+                break;
+            }
+            if (Hidinshell) {
+                pline("%s attack glances harmlessly off of your protective shell.",
+                      s_suffix(Monnam(mtmp)));
                 break;
             }
             pline("%s %ss you!", Monnam(mtmp),
@@ -4239,6 +4278,22 @@ struct attack *mattk;
     case AD_CNCL:
         if (!rn2(6)) {
             (void) cancel_monst(mtmp, (struct obj *) 0, TRUE, TRUE, FALSE);
+        }
+        return 1;
+    case AD_SLIM:
+        if (!rn2(3)) {
+            Your("slime splashes onto %s!", mon_nam(mtmp));
+            if (flaming(mtmp->data)) {
+                pline_The("slime burns away!");
+            } else if (slimeproof(mtmp->data)) {
+                pline("%s is unaffected.", Monnam(mtmp));
+            } else if (!rn2(4) && !slimeproof(mtmp->data)) {
+                if (!munslime(mtmp, FALSE) && !DEADMONSTER(mtmp)) {
+                    if (newcham(mtmp, &mons[PM_GREEN_SLIME], FALSE,
+                                (boolean) (canseemon(mtmp))))
+                    mtmp->mstrategy &= ~STRAT_WAITFORU;
+                }
+            }
         }
         return 1;
         break;
