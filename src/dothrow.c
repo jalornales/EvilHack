@@ -1991,7 +1991,8 @@ register struct obj *obj; /* thrownobj or kickedobj or uwep */
                     return 1;
                 }
             }
-            (void) passive_obj(mon, obj, (struct attack *) 0);
+            if (passive_obj(mon, obj, (struct attack *) 0) == ER_DESTROYED)
+                return 1;
         } else {
             tmiss(obj, mon, TRUE);
             if (hmode == HMON_APPLIED)
@@ -2401,15 +2402,16 @@ boolean
 break_glass_obj(obj)
 struct obj* obj;
 {
+    long unwornmask;
+    boolean ucarried;
     if (!obj || !breaktest(obj) || rn2(6))
         return FALSE;
     /* now we are definitely breaking it */
 
-    boolean your_fault = !context.mon_moving;
-    boolean ucarried = carried(obj);
+    ucarried = carried(obj);
 
     /* remove its worn flags */
-    long unwornmask = obj->owornmask;
+    unwornmask = obj->owornmask;
     if (!unwornmask) {
         impossible("breaking non-equipped glass obj?");
         return FALSE;
@@ -2448,7 +2450,7 @@ struct obj* obj;
         pline("One of %s breaks into pieces!", yname(obj));
         obj = splitobj(obj, 1L);
     }
-    breakobj(obj, obj->ox, obj->oy, your_fault, TRUE);
+    breakobj(obj, obj->ox, obj->oy, !context.mon_moving, TRUE);
     if (ucarried)
         update_inventory();
     return TRUE;

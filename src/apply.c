@@ -125,9 +125,9 @@ struct obj *obj;
                 const char *what;
 
                 what = (ublindf->otyp == LENSES)
-                           ? "lenses"
-                           : (obj->otyp == ublindf->otyp) ? "other towel"
-                                                          : "blindfold";
+                           ? "lenses" : (ublindf->otyp == GOGGLES)
+                             ? "goggles" : (obj->otyp == ublindf->otyp)
+                               ? "other towel" : "blindfold";
                 if (ublindf->cursed) {
                     You("push your %s %s.", what,
                         rn2(2) ? "cock-eyed" : "crooked");
@@ -433,7 +433,8 @@ register struct obj *obj;
                     what = simple_typename(odummy->otyp);
                 }
                 use_plural = (is_boots(odummy) || is_gloves(odummy)
-                              || odummy->otyp == LENSES);
+                              || odummy->otyp == LENSES
+                              || odummy->otyp == GOGGLES);
                 break;
             case M_AP_MONSTER: /* ignore Hallucination here */
                 what = mons[mtmp->mappearance].mname;
@@ -518,6 +519,8 @@ STATIC_OVL void
 use_whistle(obj)
 struct obj *obj;
 {
+    boolean unknown, known;
+
     if (!can_blow(&youmonst)) {
         You("are incapable of using the whistle.");
     } else if (!u_handsy()) {
@@ -530,6 +533,16 @@ struct obj *obj;
         else
             You(whistle_str, obj->cursed ? "shrill" : "high");
         wake_nearby();
+
+        if (obj->otyp == PEA_WHISTLE) {
+            unknown = objects[obj->otyp].oc_name_known;
+            makeknown(obj->otyp);
+            known = objects[obj->otyp].oc_name_known;
+            if (flags.verbose && !unknown && known) {
+                pline("This must be %s.", an(simple_typename(obj->otyp)));
+                update_inventory();
+            }
+        }
         if (obj->cursed)
             vault_summon_gd();
     }
@@ -539,7 +552,8 @@ STATIC_OVL void
 use_magic_whistle(obj)
 struct obj *obj;
 {
-    register struct monst *mtmp, *nextmon;
+    struct monst *mtmp, *nextmon;
+    boolean unknown, known;
 
     if (!can_blow(&youmonst)) {
         You("are incapable of using the whistle.");
@@ -550,7 +564,7 @@ struct obj *obj;
             Deaf ? "frequency vibration" : "pitched humming noise");
         wake_nearby();
     } else {
-        int pet_cnt = 0, omx, omy;
+        int omx, omy;
 
         /* it's magic!  it works underwater too (at a higher pitch) */
         You(Deaf ? alt_whistle_str : whistle_str,
@@ -579,15 +593,19 @@ struct obj *obj;
                 mnexto(mtmp);
                 if (mtmp->mx != omx || mtmp->my != omy) {
                     mtmp->mundetected = 0; /* reveal non-mimic hider */
-                    if (canspotmon(mtmp))
-                        ++pet_cnt;
                     if (mintrap(mtmp) == 2)
                         change_luck(-1);
                 }
             }
         }
-        if (pet_cnt > 0)
-            makeknown(obj->otyp);
+    }
+
+    unknown = objects[obj->otyp].oc_name_known;
+    makeknown(obj->otyp);
+    known = objects[obj->otyp].oc_name_known;
+    if (flags.verbose && !unknown && known) {
+        pline("This must be %s.", an(simple_typename(obj->otyp)));
+        update_inventory();
     }
 }
 
@@ -1429,6 +1447,8 @@ struct obj *obj;
     xchar x, y;
 
     if (obj->lamplit) {
+        if (Underwater && obj->otyp == MAGIC_LAMP)
+            return FALSE;
         if (obj->otyp == OIL_LAMP || obj->otyp == MAGIC_LAMP
             || obj->otyp == LANTERN || obj->otyp == POT_OIL) {
             (void) get_obj_location(obj, &x, &y, 0);
@@ -1498,8 +1518,8 @@ struct obj *obj;
     }
     if (!u_handsy())
         return;
-    if (Underwater) {
-        pline(!Is_candle(obj) ? "This is not a diving lamp"
+    if (Underwater && obj->otyp != MAGIC_LAMP) {
+        pline(!Is_candle(obj) ? "This is not a diving lamp."
                               : "Sorry, fire and water don't mix.");
         return;
     }
@@ -1770,13 +1790,13 @@ check_mon_jump(mtmp, x, y)
 struct monst *mtmp;
 int x, y;
 {
+    int traj,
+        dx = x - u.ux, dy = y - u.uy,
+        ax = abs(dx), ay = abs(dy);
     coord mc, tc;
     mc.x = mtmp->mx, mc.y = mtmp->my;
     tc.x = x, tc.y = y; /* target */
 
-    int traj,
-        dx = x - u.ux, dy = y - u.uy,
-        ax = abs(dx), ay = abs(dy);
     /* traj: flatten out the trajectory => some diagonals re-classified */
     if (ax >= 2 * ay)
         ay = 0;
@@ -1830,7 +1850,7 @@ int magic; /* 0=Physical, otherwise skill level */
 
     /* attempt "jumping" spell if hero has no innate jumping ability */
     if (!magic && !Jumping && known_spell(SPE_JUMPING))
-        return spelleffects(spell_idx(SPE_JUMPING), FALSE);
+        return spelleffects(spell_idx(SPE_JUMPING), FALSE, FALSE);
 
     if (!magic && (nolimbs(youmonst.data) || slithy(youmonst.data))) {
         /* normally (nolimbs || slithy) implies !Jumping,
@@ -4234,6 +4254,7 @@ doapply()
     switch (obj->otyp) {
     case BLINDFOLD:
     case LENSES:
+    case GOGGLES:
         if (obj == ublindf) {
             if (!cursed(obj, FALSE))
                 Blindf_off(obj);
@@ -4241,10 +4262,9 @@ doapply()
             Blindf_on(obj);
         } else {
             You("are already %s.", ublindf->otyp == TOWEL
-                                       ? "covered by a towel"
-                                       : ublindf->otyp == BLINDFOLD
-                                             ? "wearing a blindfold"
-                                             : "wearing lenses");
+                ? "covered by a towel" : ublindf->otyp == BLINDFOLD
+                  ? "wearing a blindfold" : ublindf->otyp == GOGGLES
+                    ? "wearing goggles" : "wearing lenses");
         }
         break;
     case CREAM_PIE:
@@ -4267,7 +4287,7 @@ doapply()
     case OILSKIN_SACK:
     case IRON_SAFE:
     case CRYSTAL_CHEST:
-        res = use_container(&obj, 1, FALSE);
+        res = use_container(&obj, TRUE, FALSE);
         break;
     case BAG_OF_TRICKS:
         (void) bagotricks(obj, FALSE, (int *) 0);
@@ -4384,7 +4404,7 @@ doapply()
         res = do_play_instrument(obj);
         break;
     case HORN_OF_PLENTY: /* not a musical instrument */
-        (void) hornoplenty(obj, FALSE);
+        (void) hornoplenty(obj, FALSE, (struct obj *) 0);
         break;
     case LAND_MINE:
     case BEARTRAP:

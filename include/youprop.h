@@ -89,6 +89,10 @@
 #define EStone_resistance u.uprops[STONE_RES].extrinsic
 #define Stone_resistance (HStone_resistance || EStone_resistance)
 
+#define HDeath_resistance u.uprops[DEATH_RES].intrinsic
+#define EDeath_resistance u.uprops[DEATH_RES].extrinsic
+#define Death_resistance (HDeath_resistance || EDeath_resistance)
+
 /* Intrinsics only */
 #define HSick_resistance u.uprops[SICK_RES].intrinsic
 #define ESick_resistance u.uprops[SICK_RES].extrinsic
@@ -120,7 +124,8 @@
 #define Confusion HConfusion
 
 #define Blinded u.uprops[BLINDED].intrinsic
-#define Blindfolded (ublindf && ublindf->otyp != LENSES)
+#define Blindfolded \
+    (ublindf && !(ublindf->otyp == LENSES || ublindf->otyp == GOGGLES))
 /* ...means blind because of a cover */
 #define Blind                                     \
     ((u.uroleplay.blind || Blinded || Blindfolded \
@@ -296,8 +301,15 @@
 #define HMagical_breathing u.uprops[MAGICAL_BREATHING].intrinsic
 #define EMagical_breathing u.uprops[MAGICAL_BREATHING].extrinsic
 #define Amphibious \
-    (HMagical_breathing || EMagical_breathing || amphibious(youmonst.data))
+    (HMagical_breathing || EMagical_breathing || amphibious(youmonst.data) \
+     || racial_tortle(&youmonst))
 /* Get wet, may go under surface */
+
+#define See_underwater \
+    ((HSwimming && (HMagical_breathing || amphibious(youmonst.data)  \
+                    || racial_tortle(&youmonst)))                    \
+     || (ublindf && ublindf->oartifact == ART_EYES_OF_THE_OVERWORLD) \
+     || (ublindf && ublindf->otyp == GOGGLES))
 
 #define Breathless \
     (HMagical_breathing || EMagical_breathing || breathless(youmonst.data))
@@ -399,8 +411,9 @@
 
 #define HFast u.uprops[FAST].intrinsic
 #define EFast u.uprops[FAST].extrinsic
-#define Fast ((HFast || EFast) && !Slow)
-#define Very_fast (((HFast & ~INTRINSIC) || EFast) && !Slow)
+#define SFast (Underwater && is_fast_underwater(youmonst.data))
+#define Fast ((HFast || EFast || SFast) && !Slow)
+#define Very_fast (((HFast & ~INTRINSIC) || EFast || SFast) && !Slow)
 
 #define HSlow u.uprops[SLOW].intrinsic
 #define ESlow u.uprops[SLOW].extrinsic

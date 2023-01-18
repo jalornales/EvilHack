@@ -43,7 +43,8 @@ enum mcast_cleric_spells {
     CLC_LIGHTNING,
     CLC_FIRE_PILLAR,
     CLC_GEYSER,
-    CLC_SUMMON_ELM
+    CLC_SUMMON_MINION,
+    CLC_CALL_UNDEAD
 };
 
 extern void you_aggravate(struct monst *);
@@ -77,21 +78,6 @@ register struct monst *mtmp;
         }
     }
     return FALSE;
-}
-
-boolean
-can_cast_spells(mtmp)
-register struct monst *mtmp;
-{
-    return mtmp->mspec_used <= maxspelltimeout(mtmp);
-}
-
-int maxspelltimeout(mtmp)
-register struct monst *mtmp;
-{
-   if (mtmp->m_lev >= 38)
-       return 255;
-   return 8 * mtmp->m_lev * ((38 - mtmp->m_lev) * 2 / 3);
 }
 
 int spelltimeout(mtmp, spl_level)
@@ -258,7 +244,7 @@ int spellnum;
             || mtmp->mtame || mtmp->mpeaceful)
             return CLC_FIRE_PILLAR;
         else
-            return CLC_SUMMON_ELM;
+            return CLC_SUMMON_MINION;
     case 12:
         return CLC_GEYSER;
     case 11:
@@ -272,6 +258,8 @@ int spellnum;
     case 9:
         return CLC_CURSE_ITEMS;
     case 8:
+        return CLC_CALL_UNDEAD;
+    case 7:
         if ((is_demon(mtmp->data)
              && mtmp->data != &mons[PM_LOLTH])
             || mtmp->mtame || mtmp->mpeaceful
@@ -279,7 +267,6 @@ int spellnum;
             return CLC_VULN_YOU;
         else
             return CLC_INSECTS;
-    case 7:
     case 6:
         return CLC_BLIND_YOU;
     case 5:
@@ -447,22 +434,29 @@ boolean foundyou;
             pline("You're enveloped in hellfire!");
         else
             pline("You're enveloped in flames.");
-        if (is_demon(mtmp->data) && (how_resistant(FIRE_RES) == 100)) {
+
+        if (how_resistant(FIRE_RES) == 100) {
             shieldeff(u.ux, u.uy);
-            pline_The("hellish flames sear your soul!");
-            dmg = (dmg + 1) / 2;
-            burn_away_slime();
-            break;
-        } else if (how_resistant(FIRE_RES) == 100) {
-            shieldeff(u.ux, u.uy);
-            pline("But you resist the effects.");
-            monstseesu(M_SEEN_FIRE);
-            dmg = 0;
+            if (is_demon(mtmp->data)) {
+                if (Race_if(PM_DEMON) || nonliving(youmonst.data)) {
+                    dmg = 0;
+                } else {
+                    pline_The("hellish flames sear your soul!");
+                    dmg = (dmg + 1) / 2;
+                }
+            } else {
+                pline("But you resist the effects.");
+                monstseesu(M_SEEN_FIRE);
+                dmg = 0;
+            }
         } else {
-            if (is_demon(mtmp->data))
-                dmg = resist_reduce(dmg, FIRE_RES) / 2;
-            else
+            if (is_demon(mtmp->data)
+                && !(Race_if(PM_DEMON) || nonliving(youmonst.data))) {
+                pline_The("hellish flames sear your soul!");
+                dmg = resist_reduce(dmg, FIRE_RES) * 2;
+            } else {
                 dmg = resist_reduce(dmg, FIRE_RES);
+            }
         }
         burn_away_slime();
         break;
@@ -653,8 +647,10 @@ int spellnum;
     switch (spellnum) {
     case MGC_DEATH_TOUCH:
         pline("Oh no, %s's using the touch of death!", mhe(mtmp));
-        if (immune_death_magic(youmonst.data)) {
-            You("seem no more dead than before.");
+        if (Death_resistance || immune_death_magic(youmonst.data)) {
+            You("%s.", nonliving(youmonst.data)
+                ? " seem no more dead than before"
+                : " are unaffected");
         } else {
             if (Hallucination) {
                 You("have an out of body experience.");
@@ -704,7 +700,6 @@ int spellnum;
                 shieldeff(u.ux, u.uy);
                 pline("The acid dissipates harmlessly.");
                 monstseesu(M_SEEN_ACID);
-                dmg = 0;
             }
             if (rn2(u.twoweap ? 2 : 3))
                 acid_damage(uwep);
@@ -720,8 +715,9 @@ int spellnum;
             } else {
                 You_hear("some cursing!");
             }
-            dmg = 0;
         }
+        /* damage is handled by explode() */
+        dmg = 0;
         break;
     case MGC_CLONE_WIZ:
         if (mtmp->iswiz && context.no_of_wizards == 1) {
@@ -732,24 +728,28 @@ int spellnum;
             impossible("bad wizard cloning?");
         break;
     case MGC_SUMMON_MONS: {
-        int count;
+        int count = nasty(mtmp, FALSE);
 
-        count = nasty(mtmp, FALSE); /* summon something nasty */
-        if (mtmp->iswiz) {
+        if (!count) {
+            ; /* nothing was created? */
+        } else if (mtmp->iswiz) {
             verbalize("Destroy the thief, my pet%s!", plur(count));
         } else if (mtmp->data == &mons[PM_KATHRYN_THE_ICE_QUEEN]) {
             verbalize("Defend me, my minion%s!", plur(count));
         } else {
-            const char *mappear = (count == 1) ? "A monster appears"
-                                               : "Monsters appear";
+            boolean one = (count == 1);
+            const char *mappear = one ? "A monster appears"
+                                      : "Monsters appear";
 
             /* messages not quite right if plural monsters created but
                only a single monster is seen */
             if (Invis && !mon_prop(mtmp, SEE_INVIS)
                 && (mtmp->mux != u.ux || mtmp->muy != u.uy))
-                pline("%s around a spot near you!", mappear);
+                pline("%s %s a spot near you!", mappear,
+                      one ? "at" : "around");
             else if (Displaced && (mtmp->mux != u.ux || mtmp->muy != u.uy))
-                pline("%s around your displaced image!", mappear);
+                pline("%s %s your displaced image!", mappear,
+                      one ? "by" : "around");
             else
                 pline("%s from nowhere!", mappear);
         }
@@ -838,7 +838,6 @@ int spellnum;
                 monstseesu((spellnum == MGC_FIRE_BOLT) ? M_SEEN_FIRE
                                                        : M_SEEN_COLD);
                 pline("But you resist the effects.");
-                dmg = 0;
             }
         } else {
             if (canseemon(mtmp)) {
@@ -848,8 +847,9 @@ int spellnum;
             } else {
                 You_hear("some cursing!");
             }
-            dmg = 0;
         }
+        /* damage is handled by explode() */
+        dmg = 0;
         break;
     case MGC_PSI_BOLT:
         /* prior to 3.4.0 Antimagic was setting the damage to 1--this
@@ -896,6 +896,7 @@ int spellnum;
     int aligntype, ml = min(mtmp->m_lev, 50);
     static const char *Moloch = "Moloch";
     struct monst *minion = (struct monst *) 0;
+    coord mm;
 
     if (dmg == 0 && !is_undirected_spell(AD_CLRC, spellnum)) {
         impossible("cast directed cleric spell (%d) with dmg=0?", spellnum);
@@ -903,7 +904,7 @@ int spellnum;
     }
 
     switch (spellnum) {
-    case CLC_SUMMON_ELM:
+    case CLC_SUMMON_MINION:
 
         if (mtmp->data == &mons[PM_KATHRYN_THE_ICE_QUEEN]) {
             coord bypos;
@@ -1000,6 +1001,13 @@ int spellnum;
     case CLC_CURSE_ITEMS:
         You_feel("as if you need some help.");
         rndcurse();
+        dmg = 0;
+        break;
+    case CLC_CALL_UNDEAD:
+        mm.x = u.ux;
+        mm.y = u.uy;
+        pline("Undead creatures are called forth from the grave!");
+        mkundead(&mm, FALSE, NO_MINVENT);
         dmg = 0;
         break;
     case CLC_INSECTS: {
@@ -1259,6 +1267,7 @@ int spellnum;
         case CLC_INSECTS:
         case CLC_CURE_SELF:
         case CLC_PROTECTION:
+        case CLC_CALL_UNDEAD:
             return TRUE;
         default:
             break;
@@ -1275,6 +1284,8 @@ struct monst *mdef;
 unsigned int adtyp;
 int spellnum;
 {
+    boolean evilpriest = (mtmp->ispriest && mon_aligntyp(mtmp) < A_NEUTRAL);
+
     if (adtyp == AD_SPEL) {
         /* aggravate monsters, etc. won't be cast by peaceful monsters */
         if (mtmp->mpeaceful
@@ -1335,6 +1346,14 @@ int spellnum;
         if ((!haseyes(mdef->data) || mdef->mblinded)
             && spellnum == CLC_BLIND_YOU)
             return TRUE;
+        if (mtmp->mpeaceful && spellnum == CLC_CALL_UNDEAD)
+            return TRUE;
+        /* only undead/demonic spell casters, chaotic/unaligned priests
+           and quest nemesis can summon undead */
+        if (spellnum == CLC_CALL_UNDEAD && !is_undead(mtmp->data)
+            && !is_demon(mtmp->data) && !evilpriest
+            && mtmp->data->msound != MS_NEMESIS)
+            return TRUE;
     }
     return FALSE;
 }
@@ -1362,6 +1381,8 @@ int spellnum;
         /* healing when already healed */
         if (u.mh == u.mhmax && spellnum == CLC_CURE_SELF)
             return TRUE;
+        if (spellnum == CLC_CALL_UNDEAD)
+            return TRUE;
     }
     return FALSE;
 }
@@ -1381,6 +1402,7 @@ int spellnum;
      * We really want something like "if the monster could see mux, muy".
      */
     boolean mcouldseeu = couldsee(mtmp->mx, mtmp->my);
+    boolean evilpriest = (mtmp->ispriest && mon_aligntyp(mtmp) < A_NEUTRAL);
 
     if (adtyp == AD_SPEL) {
         /* aggravate monsters, etc. won't be cast by peaceful monsters */
@@ -1461,6 +1483,14 @@ int spellnum;
         /* blindness spell on blinded player */
         if (Blinded && spellnum == CLC_BLIND_YOU)
             return TRUE;
+        if (mtmp->mpeaceful && spellnum == CLC_CALL_UNDEAD)
+            return TRUE;
+        /* only undead/demonic spell casters, chaotic/unaligned priests
+           and quest nemesis can summon undead */
+        if (spellnum == CLC_CALL_UNDEAD && !is_undead(mtmp->data)
+            && !is_demon(mtmp->data) && !evilpriest
+            && mtmp->data->msound != MS_NEMESIS)
+            return TRUE;
     }
     return FALSE;
 }
@@ -1527,20 +1557,21 @@ register struct attack *mattk;
     return 1;
 }
 
-/* return values:
-* 2: target died
-* 1: successful spell
-* 0: unsuccessful spell
-*/
 int
 castmm(mtmp, mdef, mattk)
-register struct monst *mtmp;
-register struct monst *mdef;
-register struct attack *mattk;
+struct monst *mtmp;
+struct monst *mdef;
+struct attack *mattk;
 {
     int dmg, ml = min(mtmp->m_lev, 50);
     int ret;
     int spellnum = 0;
+
+    /* guard against casting another spell attack
+       at an already dead monster; some monsters
+       have multiple AT_MAGC attacks */
+    if (mdef->mhp <= 0)
+        return 0;
 
     if ((mattk->adtyp == AD_SPEL || mattk->adtyp == AD_CLRC) && ml) {
         int cnt = 40;
@@ -1638,20 +1669,23 @@ register struct attack *mattk;
             else
                 pline("%s is enveloped in flames.", Monnam(mdef));
         }
-        if (is_demon(mtmp->data)
-            && (resists_fire(mdef) || defended(mdef, AD_FIRE))
-            && !nonliving(mdef->data)) {
+
+        if (resists_fire(mdef) || defended(mdef, AD_FIRE)) {
             shieldeff(mdef->mx, mdef->my);
-            if (canseemon(mdef))
-                pline_The("hellish flames sear %s soul!",
-                          s_suffix(mon_nam(mdef)));
-            dmg = (dmg + 1) / 2;
-            break;
-        } else if (resists_fire(mdef) || defended(mdef, AD_FIRE)) {
-            shieldeff(mdef->mx, mdef->my);
-            if (canseemon(mdef))
-                pline("But %s resists the effects.", mhe(mdef));
-            dmg = 0;
+            if (is_demon(mtmp->data)) {
+                if (!(nonliving(mdef->data) || is_demon(mdef->data))) {
+                    if (canseemon(mdef))
+                        pline_The("hellish flames sear %s soul!",
+                                  s_suffix(mon_nam(mdef)));
+                    dmg = (dmg + 1) / 2;
+                } else {
+                    dmg = 0;
+                }
+            } else {
+                if (canseemon(mdef))
+                    pline("But %s resists the effects.", mhe(mdef));
+                dmg = 0;
+            }
         }
         break;
     case AD_COLD:
@@ -1712,30 +1746,30 @@ register struct attack *mattk;
         }
     }
 
-    if (dmg > 0 && mdef->mhp > 0) {
+    if (dmg) {
         mdef->mhp -= dmg;
-        if (mdef->mhp < 1)
+        if (DEADMONSTER(mdef))
             monkilled(mdef, "", mattk->adtyp);
     }
-    if (mdef && mdef->mhp < 1)
-        return 2;
+
     return (ret);
 }
 
-/* return values:
-* 2: target died
-* 1: successful spell
-* 0: unsuccessful spell
-*/
 int
 castum(mtmp, mattk)
-register struct monst *mtmp;
-register struct attack *mattk;
+struct monst *mtmp;
+struct attack *mattk;
 {
     int dmg, ml = mons[u.umonnum].mlevel;
     int ret;
     int spellnum = 0;
     boolean directed = FALSE;
+
+    /* guard against casting another spell attack
+       at an already dead monster; some monsters
+       have multiple AT_MAGC attacks */
+    if (mtmp->mhp <= 0)
+        return 0;
 
     if ((mattk->adtyp == AD_SPEL || mattk->adtyp == AD_CLRC) && ml) {
         int cnt = 40;
@@ -1823,20 +1857,23 @@ register struct attack *mattk;
             else
                 pline("%s is enveloped in flames.", Monnam(mtmp));
         }
-        if (is_demon(youmonst.data)
-            && (resists_fire(mtmp) || defended(mtmp, AD_FIRE))
-            && !nonliving(mtmp->data)) {
+
+        if (resists_fire(mtmp) || defended(mtmp, AD_FIRE)) {
             shieldeff(mtmp->mx, mtmp->my);
-            if (canseemon(mtmp))
-                pline_The("hellish flames sear %s soul!",
-                          s_suffix(mon_nam(mtmp)));
-            dmg = (dmg + 1) / 2;
-            break;
-        } else if (resists_fire(mtmp) || defended(mtmp, AD_FIRE)) {
-            shieldeff(mtmp->mx, mtmp->my);
-            if (canseemon(mtmp))
-                pline("But %s resists the effects.", mhe(mtmp));
-            dmg = 0;
+            if (is_demon(youmonst.data)) {
+                if (!(nonliving(mtmp->data) || is_demon(mtmp->data))) {
+                    if (canseemon(mtmp))
+                        pline_The("hellish flames sear %s soul!",
+                                  s_suffix(mon_nam(mtmp)));
+                    dmg = (dmg + 1) / 2;
+                } else {
+                    dmg = 0;
+                }
+            } else {
+                if (canseemon(mtmp))
+                    pline("But %s resists the effects.", mhe(mtmp));
+                dmg = 0;
+            }
         }
         break;
     case AD_COLD:
@@ -1881,13 +1918,12 @@ register struct attack *mattk;
         }
     }
 
-    if (mtmp && dmg > 0 && mtmp->mhp > 0) {
+    if (dmg) {
         mtmp->mhp -= dmg;
-        if (mtmp->mhp < 1)
+        if (DEADMONSTER(mtmp))
             killed(mtmp);
     }
-    if (mtmp && mtmp->mhp < 1)
-        return 2;
+
     return (ret);
 }
 
@@ -1947,7 +1983,10 @@ int spellnum;
              || resists_magm(mtmp) || defended(mtmp, AD_MAGM));
         if (immune_death_magic(mtmp->data) || is_vampshifter(mtmp)) {
             if (yours || canseemon(mtmp))
-                pline("%s seems no more dead than before.", Monnam(mtmp));
+                pline("%s %s.", Monnam(mtmp),
+                      nonliving(mtmp->data)
+                          ? "seems no more dead than before"
+                          : "is unaffected");
         } else if (!resisted) {
             mtmp->mhp = -1;
             if (yours)
@@ -1996,16 +2035,17 @@ int spellnum;
         }
         if (yours || canseemon(mtmp))
             You("douse %s in a torrent of acid!", mon_nam(mtmp));
+        explode(mtmp->mx, mtmp->my, AD_ACID - 1, d((u.ulevel / 2) + 4, 8),
+                WAND_CLASS, EXPL_ACID);
         if (resists_acid(mtmp) || defended(mtmp, AD_ACID)) {
             shieldeff(mtmp->mx, mtmp->my);
             if (canseemon(mtmp))
                 pline("But the acid dissipates harmlessly.");
-            dmg = 0;
         }
-        explode(mtmp->mx, mtmp->my, AD_ACID - 1, d((u.ulevel / 2) + 4, 8),
-                WAND_CLASS, EXPL_ACID);
         if (rn2(4))
             erode_armor(mtmp, ERODE_CORRODE);
+        /* damage is handled by explode() */
+        dmg = 0;
         break;
     case MGC_SUMMON_MONS: {
         int count = 0;
@@ -2019,6 +2059,7 @@ int spellnum;
         } else {
             register int i, j;
             int makeindex, tmp = (u.ulevel > 3) ? u.ulevel / 3 : 1;
+            const char *mappear;
             coord bypos;
 
             if (mtmp)
@@ -2028,7 +2069,7 @@ int spellnum;
             else
                 bypos.x = mattk->mx, bypos.y = mattk->my;
 
-            for (i = rnd(tmp); i > 0; --i)
+            for (i = rnd(tmp); i > 0; --i) {
                 for (j = 0; j < 20; j++) {
                     do {
                         makeindex = pick_nasty();
@@ -2060,10 +2101,8 @@ int spellnum;
                         break;
                     }
                 }
-
-            const char *mappear =
-                    (count == 1) ? "A monster appears" : "Monsters appear";
-
+            }
+            mappear = (count == 1) ? "A monster appears" : "Monsters appear";
             if (yours || canseemon(mtmp))
                 pline("%s from nowhere!", mappear);
         }
@@ -2159,16 +2198,18 @@ int spellnum;
             impossible("ucast haste but not yours?");
             return;
         }
-        if (!(HFast & INTRINSIC))
+        if (!(HFast & INTRINSIC)) {
             You("are suddenly moving faster.");
             HFast |= INTRINSIC;
-            dmg = 0;
+        }
+        dmg = 0;
         break;
     case MGC_CURE_SELF:
-        if (!yours)
+        if (!yours) {
             impossible("ucast healing but not yours?");
-        else if (u.mh < u.mhmax) {
+        } else if (u.mh < u.mhmax) {
             You("feel better.");
+            u.mh += dmg;
             if ((u.mh += d(3, 6)) > u.mhmax)
                 u.mh = u.mhmax;
             context.botl = 1;
@@ -2184,20 +2225,18 @@ int spellnum;
         if (yours || canseemon(mtmp)) {
             You("blast %s with %s!", mon_nam(mtmp),
                 (spellnum == MGC_FIRE_BOLT) ? "fire" : "ice");
+            explode(mtmp->mx, mtmp->my, (spellnum == MGC_FIRE_BOLT) ? AD_FIRE - 1
+                                                                    : AD_COLD - 1,
+                    d((u.ulevel / 5) + 1, 8), WAND_CLASS, 1);
             if (spellnum == MGC_FIRE_BOLT
                 && (resists_fire(mtmp) || defended(mtmp, AD_FIRE))) {
                 shieldeff(mtmp->mx, mtmp->my);
                 pline("But %s seems unaffected by the fire.", mon_nam(mtmp));
-                dmg = 0;
             } else if (spellnum == MGC_ICE_BOLT
                 && (resists_cold(mtmp) || defended(mtmp, AD_COLD))) {
                 shieldeff(mtmp->mx, mtmp->my);
                 pline("But %s seems unaffected by the cold.", mon_nam(mtmp));
-                dmg = 0;
             }
-            explode(mtmp->mx, mtmp->my, (spellnum == MGC_FIRE_BOLT) ? AD_FIRE - 1
-                                                                    : AD_COLD - 1,
-                    d((u.ulevel / 5) + 1, 8), WAND_CLASS, 1);
             if (spellnum == MGC_FIRE_BOLT) {
                 (void) burnarmor(mtmp);
                 destroy_mitem(mtmp, SCROLL_CLASS, AD_FIRE);
@@ -2206,6 +2245,8 @@ int spellnum;
                 (void) burn_floor_objects(mtmp->mx, mtmp->my, TRUE, FALSE);
             }
         }
+        /* damage is handled by explode() */
+        dmg = 0;
         break;
     case MGC_PSI_BOLT:
         if (!mtmp || mtmp->mhp < 1) {
@@ -2227,9 +2268,9 @@ int spellnum;
         break;
     }
 
-    if (dmg > 0 && mtmp && mtmp->mhp > 0) {
+    if (dmg) {
         mtmp->mhp -= dmg;
-        if (mtmp->mhp < 1) {
+        if (DEADMONSTER(mtmp)) {
             if (yours)
                 killed(mtmp);
             else
@@ -2262,9 +2303,9 @@ int spellnum;
     }
 
     switch (spellnum) {
-    case CLC_SUMMON_ELM:
+    case CLC_SUMMON_MINION:
         if (!mtmp || mtmp->mhp < 1) {
-            impossible("summon elemental spell with no mtmp");
+            impossible("summon minion spell with no mtmp");
             return;
         }
 
@@ -2458,8 +2499,11 @@ int spellnum;
         dmg = 0;
         break;
     case CLC_CURE_SELF:
-        if (u.mh < u.mhmax) {
+        if (!yours) {
+            impossible("ucast healing but not yours?");
+        } else if (u.mh < u.mhmax) {
             You("feel better.");
+            u.mh += dmg;
             /* note: player healing does 6d4; this used to do 1d8 */
             if ((u.mh += d(3, 6)) > u.mhmax)
                 u.mh = u.mhmax;
@@ -2475,37 +2519,42 @@ int spellnum;
 
         if (yours || canseemon(mtmp)) {
             dmg = rnd(4);
-            pline("A %s film oozes over its exterior!",
-                  Blind ? "slimy" : vulntext[dmg]);
+            pline("A %s film oozes over %s exterior!",
+                  Blind ? "slimy" : vulntext[dmg], mhis(mtmp));
             switch (dmg) {
             case 1:
-                if (mtmp->data->mflags4 & M4_VULNERABLE_FIRE)
+                if ((mtmp->data->mflags4 & M4_VULNERABLE_FIRE) != 0
+                    || mtmp->vuln_fire)
                     return;
-                mtmp->data->mflags4 |= M4_VULNERABLE_FIRE;
+                mtmp->vuln_fire = rnd(100) + 150;
                 pline("%s is more inflammable.", Monnam(mtmp));
                 break;
             case 2:
-                if (mtmp->data->mflags4 & M4_VULNERABLE_COLD)
+                if ((mtmp->data->mflags4 & M4_VULNERABLE_COLD) != 0
+                    || mtmp->vuln_cold)
                     return;
-                mtmp->data->mflags4 |= M4_VULNERABLE_COLD;
+                mtmp->vuln_cold = rnd(100) + 150;
                 pline("%s is extremely chilly.", Monnam(mtmp));
                 break;
             case 3:
-                if (mtmp->data->mflags4 & M4_VULNERABLE_ELEC)
+                if ((mtmp->data->mflags4 & M4_VULNERABLE_ELEC) != 0
+                    || mtmp->vuln_elec)
                     return;
-                mtmp->data->mflags4 |= M4_VULNERABLE_ELEC;
+                mtmp->vuln_elec = rnd(100) + 150;
                 pline("%s is overly conductive.", Monnam(mtmp));
                 break;
             case 4:
-                if (mtmp->data->mflags4 & M4_VULNERABLE_ACID)
+                if ((mtmp->data->mflags4 & M4_VULNERABLE_ACID) != 0
+                    || mtmp->vuln_acid)
                     return;
-                mtmp->data->mflags4 |= M4_VULNERABLE_ACID;
+                mtmp->vuln_acid = rnd(100) + 150;
                 pline("%s is easily corrodable.", Monnam(mtmp));
                 break;
             default:
                 break;
             }
         }
+        dmg = 0;
         break;
     case CLC_OPEN_WOUNDS:
         if (!mtmp || mtmp->mhp < 1) {
@@ -2542,9 +2591,9 @@ int spellnum;
         break;
     }
 
-    if (dmg > 0 && mtmp->mhp > 0) {
+    if (dmg) {
         mtmp->mhp -= dmg;
-        if (mtmp->mhp < 1) {
+        if (DEADMONSTER(mtmp)) {
             if (yours)
                 killed(mtmp);
             else

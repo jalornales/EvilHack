@@ -521,7 +521,8 @@ struct obj *corpse;
         if (DEADMONSTER(mtmp))
             continue;
         mptr = mtmp->data;
-        if (mtmp->iswiz || mtmp->isvecna || mtmp->isgking
+        if (mtmp->iswiz || mtmp->isvecna
+            || mtmp->isgking || mtmp->islucifer
             || (mptr == &mons[PM_MEDUSA] && !Is_medusa_level(&u.uz))
             || mptr->msound == MS_NEMESIS || mptr->msound == MS_LEADER
             || mptr == &mons[PM_VLAD_THE_IMPALER]
@@ -669,7 +670,9 @@ struct obj *corpse;
         mtmp->mhp = mtmp->mhpmax = u.uhpmax;
         mtmp->female = flags.female;
         mtmp->msleeping = 1;
-        Strcpy(mtmp->former_rank, rank());
+        mtmp->former_rank.lev = mtmp->m_lev;
+        mtmp->former_rank.mnum = Role_switch;
+        mtmp->former_rank.female = flags.female;
     }
     for (mtmp = fmon; mtmp; mtmp = mtmp->nmon) {
         resetobjs(mtmp->minvent, FALSE);

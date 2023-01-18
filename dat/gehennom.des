@@ -4,8 +4,8 @@
 # NetHack may be freely redistributed.  See license for details.
 #
 
-MAZE: "valley", ' '
-FLAGS: noteleport,hardfloor,nommap
+MAZE:"valley", ' '
+FLAGS:noteleport,hardfloor,nommap
 GEOMETRY:center,center
 MAP
 ----------------------------------------------------------------------------
@@ -226,7 +226,7 @@ MONSTER:('&',"weredemon"),(64,03)
 # Previously the Juiblex level
 #
 MAZE:"hella-1",' '
-FLAGS:noteleport,hardfloor,shortsighted
+FLAGS:hardfloor,shortsighted
 INIT_MAP:mines,'.','}',true,true,unlit,false
 # guarantee at least one open spot to ensure successful stair placement
 GEOMETRY:left,bottom
@@ -368,7 +368,7 @@ TRAP:"magic",random
 # Previously the Asmodeus Level
 #
 MAZE:"hella-2",random
-FLAGS: noteleport,hardfloor,shortsighted
+FLAGS:hardfloor,shortsighted
 # First part
 INIT_MAP:mines,'.','}',false,true,lit,false
 GEOMETRY:half-left,center
@@ -474,7 +474,7 @@ TRAP:"magic beam", random
 # Previously the Baalzebub level
 #
 MAZE:"hella-3",' '
-FLAGS: noteleport,hardfloor,shortsighted
+FLAGS:hardfloor,shortsighted
 TERRAIN: fillrect(00,00,78,20),('.',unlit)
 TERRAIN: filter(33%,fillrect(00,00,78,20)),('}',unlit)
 TERRAIN: filter(15%,fillrect(00,00,78,20)),('s',unlit)
@@ -563,7 +563,7 @@ MONSTER:'V',random
 # The isle of Erytheia, previously Geryon's domain
 #
 MAZE:"hella-4",'W'
-FLAGS:noteleport,hardfloor
+FLAGS:hardfloor
 INIT_MAP:mines,'.','}',false,true,lit,false
 GEOMETRY:right, center
 MAP
@@ -709,7 +709,7 @@ TRAP: random, random
 # Previously Yeenoghu's realm
 #
 MAZE:"hellb-1", random
-FLAGS:noteleport,hardfloor
+FLAGS:hardfloor
 INIT_MAP:mines,'.','}',false,true,lit,false
 GEOMETRY:right,center
 MAP
@@ -898,7 +898,7 @@ TRAP: random, random
 # The City of Dis, previously Dispater's domain
 #
 MAZE:"hellb-2", ' ' 
-FLAGS:noteleport,hardfloor,shortsighted
+FLAGS:hardfloor,shortsighted
 INIT_MAP:mines,'.',' ',true,true,unlit,true
 GEOMETRY:center,center
 MAP
@@ -1085,8 +1085,8 @@ IF [50%] {
 #
 # Previously Mephistopheles' lair
 #
-MAZE: "hellb-3", ' '
-FLAGS: noteleport,hardfloor
+MAZE:"hellb-3", ' '
+FLAGS:hardfloor
 INIT_MAP:mines,'.',' ',true,true,unlit,true
 GEOMETRY:center,center
 MAP
@@ -1228,7 +1228,7 @@ IF [50%] {
 # Previously Demogorgon's towers
 #
 MAZE:"hellc-1", ' '
-FLAGS:noteleport,hardfloor,shortsighted
+FLAGS:hardfloor,shortsighted
 INIT_MAP:mines,'.','}',true,true,lit,false
 GEOMETRY:center,center
 MAP
@@ -1422,7 +1422,7 @@ TRAP: "spear", random
 # Previously the New Asmodeus Level
 #
 MAZE:"hellc-2",random
-FLAGS: noteleport,hardfloor
+FLAGS:hardfloor
 GEOMETRY:half-left,center
 MAP
 LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLL----
@@ -1651,7 +1651,7 @@ MONSTER:(':',"salamander"),(73,14)
 # Stronghold
 #
 MAZE:"hellc-3", ' '
-FLAGS: noteleport,hardfloor
+FLAGS:hardfloor
 INIT_MAP:mines,'.',' ',true,true,unlit,true
 GEOMETRY:center,center
 #         1         2         3
@@ -1815,7 +1815,7 @@ IF [50%] {
 # The Orcus Level
 #
 MAZE:"orcus",random
-FLAGS: noteleport,shortsighted
+FLAGS:noteleport,shortsighted
 INIT_MAP:mines,'.',' ',true,true,unlit,true
 GEOMETRY:right,center
 # A ghost town
@@ -1980,40 +1980,45 @@ MONSTER:random,random
 # The Sanctum Level
 #
 MAZE:"sanctum", ' '
-FLAGS: noteleport,hardfloor,nommap
+FLAGS:noteleport,hardfloor,nommap
 # This is outside the main map, below, so we must do it before adding
 # that map and anchoring coordinates to it. This extends the invisible
 # barrier up to the top row, which falls outside the drawn map.
 NON_PASSWALL:(39,00,41,00)
 GEOMETRY:center,center
+#         1         2         3         4         5         6         7    7
+#123456789012345678901234567890123456789012345678901234567890123456789012345
 MAP
 LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 LLLLLLLLLLLLLL----F----F----LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 LLLLLLLLLLLLLL|............|LLLLLLLLLLLLL-------LLLLLLLLLLLLLLLLLLLLLLLLLLLL
-LLLLLLLL---F---............---F-LLLLLLLLLF.....FLLLLLLLLLLLLLLLLLLLLLLLLLLLL
-LLLLLLLL|......................|LLLLLLLL--.....|LLLLLLLLLLLL--F---F--LLLLLLL
-LLLLL-F--....LLLLLLLLLLL.......-F-----LL|......----LLLLLLLLL|.......|LLLLLLL
-LLLLL|.......L---------L.........|...|LL|.........|--F----F---+---..FLLLLLLL
-LLL---.......L|.......|L.........--S--LL|.........|.....S........|..|LLLLLLL
-LLLF.........L|.......|L............|LLLF.........---S---..-----S----LLLLLLL
-LLL|.........L|.......|L.........----LLL|..........|....|..|......|LLLLLLLLL
-LLL|.........L|.......|L.........FLLLLLL--.......----+---S---S--..FLLLLLLLLL
-LLLF.........L---------L.........|LLLLLLLF.......|.............|..|LLLLLLLLL
-LLL---.......LLLLLLLLLLL.........|LLLLLLL-----+-------S---------S---LLLLLLLL
-LLLLL|...........................FLLLLLLLLLL|...F.F......|....|....|--LLLLLL
-LLLLL-F--.....................----LLLLLLLLLLF...-F-....------S-......FLLLLLL
-LLLLLLLL|.....................|LLLLLLLLLLLLL|..........|LLLL|.....----LLLLLL
-LLLLLLLL---F---...........---F-LLLLLLLLLLLLL--...----F--LLLLF.....|LLLLLLLLL
+LLLLLLLL------|............---F-LLLLLLLLLF.....FLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+LLLLLLLL|.....|................|LLLLLLLL--.....|LLLLLLLLLLLL--F---F--LLLLLLL
+LLLLL----.....|................-F-----LL|......----LLLLLLLLL|.......|LLLLLLL
+LLLLL|........|LLLLLLLLL.........|...|LL|.........|--F----F---+---..FLLLLLLL
+LL-------.....|--------L.........--S--LL|.........|.....S........|..|LLLLLLL
+--|....|......|.......|L............|LLLF.........---S---..-----S----LLLLLLL
+|.S..|........|.......|L.........----LLL|..........|....|..|......|LLLLLLLLL
+|.|..|........|.......|L.........FLLLLLL--.......----+---S---S--..FLLLLLLLLL
+--|....|......|.......|L.........|LLLLLLLF.......|.............|..|LLLLLLLLL
+LL-------.....|--------L.........|LLLLLLL-----+-------S---------S---LLLLLLLL
+LLLLL|........|LLLLLLLLL.........FLLLLLLLLLL|...F.F......|....|....|--LLLLLL
+LLLLL----.....|...............----LLLLLLLLLLF...-F-....------S-......FLLLLLL
+LLLLLLLL|.....|...............|LLLLLLLLLLLLL|..........|LLLL|.....----LLLLLL
+LLLLLLLL------|...........---F-LLLLLLLLLLLLL--...----F--LLLLF.....|LLLLLLLLL
 LLLLLLLLLLLLLL|...........|LLLLLLLLLLLLLLLLLLF...FLLLLLLLLLL|.....FLLLLLLLLL
 LLLLLLLLLLLLLL----F----F---LLLLLLLLLLLLLLLLLL-----LLLLLLLLLL-------LLLLLLLLL
 LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
 ENDMAP
-REGION:(15,07,21,10),lit,"temple"
-ALTAR:(18,08),noalign,sanctum
+BRANCH:(01,10,01,10),(0,0,0,0)
+REGION:(15,08,21,11),lit,"temple"
+ALTAR:(18,09),noalign,sanctum
 REGION:(41,06,48,11),unlit,"morgue",filled,irregular
 # Non diggable walls
 NON_DIGGABLE:(00,00,75,19)
 # Invisible barrier separating the left & right halves of the level
+# as well as Lucifer's chamber
+NON_PASSWALL:(00,00,14,19)
 NON_PASSWALL:(37,00,39,19)
 # Drawbridges
 DRAWBRIDGE:(38,06),west,closed
@@ -2049,33 +2054,39 @@ OBJECT:'?',random
 OBJECT:'?',random
 OBJECT:'?',random
 # Chest by the altar
-CONTAINER:('(',"crystal chest"),(17,08) {
+CONTAINER:('(',"crystal chest"),(17,09) {
   OBJECT:('(',"magic marker")
 }
+# Lucifer and his consorts
+MONSTER:('&',"Lucifer"),(04,09),hostile
+MONSTER:('&',"balrog"),(08,08),"Adramalech",asleep,hostile
+MONSTER:('&',"balrog"),(08,11),"Buer",asleep,hostile
+MONSTER:('&',"balrog"),(11,04),"Phongor",asleep,hostile
+MONSTER:('&',"balrog"),(11,15),"Zagum",asleep,hostile
 # Inner sanctum guards
-MONSTER:(':',"salamander"),(13,05),hostile
-MONSTER:(':',"salamander"),(23,05),hostile
-MONSTER:(':',"salamander"),(13,12),hostile
-MONSTER:(':',"salamander"),(23,12),hostile
-MONSTER:('&',"lava demon"),(18,05),hostile
-MONSTER:('&',"lava demon"),(18,12),hostile
+MONSTER:(':',"salamander"),(15,06),hostile
+MONSTER:(':',"salamander"),(23,06),hostile
+MONSTER:(':',"salamander"),(15,13),hostile
+MONSTER:(':',"salamander"),(23,13),hostile
+MONSTER:('&',"lava demon"),(18,06),hostile
+MONSTER:('&',"lava demon"),(18,13),hostile
 # Some monsters.
-MONSTER:('&',"pit fiend"),(14,12),hostile
-MONSTER:('&',"balrog"),(18,08),hostile
-MONSTER:('&',"erinys"),(10,04),hostile
-MONSTER:('&',"marilith"),(07,09),hostile
-MONSTER:('&',"nalfeshnee"),(27,08),hostile
-MONSTER:('h',"alhoon"),(17,07),hostile
+MONSTER:('&',"pit fiend"),(17,14),hostile
+MONSTER:('&',"balrog"),(18,08),"Baalphegor",hostile
+MONSTER:('&',"erinys"),(17,04),hostile
+MONSTER:('&',"marilith"),(17,15),hostile
+MONSTER:('&',"nalfeshnee"),(27,09),hostile
+MONSTER:('h',"alhoon"),(18,10),hostile
 # Moloch's horde
 MONSTER:('@',"aligned priest"),(20,03),noalign,hostile
 MONSTER:('@',"aligned priest"),(15,04),noalign,hostile
-MONSTER:('@',"aligned priest"),(11,05),noalign,hostile
-MONSTER:('@',"aligned priest"),(11,07),noalign,hostile
-MONSTER:('@',"aligned priest"),(11,09),noalign,hostile
-MONSTER:('@',"aligned priest"),(11,12),noalign,hostile
-MONSTER:('@',"aligned priest"),(15,13),noalign,hostile
-MONSTER:('@',"aligned priest"),(17,13),noalign,hostile
-MONSTER:('@',"aligned priest"),(21,13),noalign,hostile
+MONSTER:('@',"aligned priest"),(21,03),noalign,hostile
+MONSTER:('@',"aligned priest"),(25,08),noalign,hostile
+MONSTER:('@',"aligned priest"),(25,11),noalign,hostile
+MONSTER:('@',"aligned priest"),(21,14),noalign,hostile
+MONSTER:('@',"aligned priest"),(15,15),noalign,hostile
+MONSTER:('@',"aligned priest"),(17,15),noalign,hostile
+MONSTER:('@',"aligned priest"),(19,16),noalign,hostile
 # A few nasties
 MONSTER:'L',random
 MONSTER:'L',random

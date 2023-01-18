@@ -126,10 +126,13 @@ struct obj {
                                * (index into objects[], not mons[]) */
     int usecount;           /* overloaded for various things that tally */
 #define spestudied usecount /* # of times a spellbook has been studied */
+#define wep_kills usecount  /* number of kills a weapon has */
+#define newwarncnt usecount /* How many monsters a glow warning artifact is currently warning of */
     unsigned oeaten;        /* nutrition left in food, if partly eaten */
+#define lastwarncnt oeaten  /* How many monsters a glow warning artifact was last warning of */
     long age;               /* creation date */
     long owornmask;
-    struct oextra *oextra; /* pointer to oextra struct */
+    struct oextra *oextra;  /* pointer to oextra struct */
 };
 
 #define newobj() (struct obj *) alloc(sizeof(struct obj))
@@ -211,29 +214,10 @@ struct obj {
      || otmp->otyp == SPIKED_BARDING || otmp->otyp == BARDING_OF_REFLECTION)
 
 #define is_lawful_artifact(otmp) \
-    (otmp->oartifact == ART_EXCALIBUR || otmp->oartifact == ART_DEMONBANE                         \
-     || otmp->oartifact == ART_GRAYSWANDIR || otmp->oartifact == ART_SNICKERSNEE                  \
-     || otmp->oartifact == ART_SUNSWORD || otmp->oartifact == ART_XIUHCOATL                       \
-     || otmp->oartifact == ART_EXCALIBUR || otmp->oartifact == ART_SCEPTRE_OF_MIGHT               \
-     || otmp->oartifact == ART_MAGIC_MIRROR_OF_MERLIN || otmp->oartifact == ART_MITRE_OF_HOLINESS \
-     || otmp->oartifact == ART_TSURUGI_OF_MURAMASA || otmp->oartifact == ART_DRAMBORLEG)
+    (otmp->oartifact && arti_align(otmp->oartifact) == A_LAWFUL)
 
 #define is_chaotic_artifact(otmp) \
-    (otmp->oartifact == ART_STORMBRINGER || otmp->oartifact == ART_GRIMTOOTH                  \
-     || otmp->oartifact == ART_ORCRIST || otmp->oartifact == ART_STING                        \
-     || otmp->oartifact == ART_LIFESTEALER || otmp->oartifact == ART_DIRGE                    \
-     || otmp->oartifact == ART_SWORD_OF_KAS || otmp->oartifact == ART_LONGBOW_OF_DIANA        \
-     || otmp->oartifact == ART_MASTER_KEY_OF_THIEVERY || otmp->oartifact == ART_RING_OF_P_HUL \
-     || otmp->oartifact == ART_LUCK_BLADE || otmp->oartifact == ART_IRON_BALL_OF_LIBERATION   \
-     || otmp->oartifact == ART_CROSSBOW_OF_CARL || otmp->oartifact == ART_SECESPITA           \
-     || otmp->oartifact == ART_IDOL_OF_MOLOCH || otmp->oartifact == ART_BUTCHER               \
-     || otmp->oartifact == ART_WAND_OF_ORCUS)
-
-#define non_wishable_artifact(otmp) \
-    (otmp->oartifact == ART_MAGIC___BALL || otmp->oartifact == ART_LIFESTEALER         \
-     || otmp->oartifact == ART_BAG_OF_THE_HESPERIDES || otmp->oartifact == ART_BUTCHER \
-     || otmp->oartifact == ART_WAND_OF_ORCUS || otmp->oartifact == ART_EYE_OF_VECNA    \
-     || otmp->oartifact == ART_HAND_OF_VECNA || otmp->oartifact == ART_SWORD_OF_KAS)
+    (otmp->oartifact && arti_align(otmp->oartifact) == A_CHAOTIC)
 
 #define is_magical_staff(otmp) \
     (otmp->otyp == STAFF_OF_DIVINATION || otmp->otyp == STAFF_OF_HEALING \
@@ -305,9 +289,15 @@ struct obj {
 #define mlevelgain(obj) (ofood(obj) && (obj)->corpsenm == PM_WRAITH)
 #define mhealup(obj) (ofood(obj) && (obj)->corpsenm == PM_NURSE)
 #define is_royaljelly(o) (o->otyp == LUMP_OF_ROYAL_JELLY)
-#define Is_pudding(o)                                                 \
+#define Is_pudding(o) \
     (o->otyp == GLOB_OF_GRAY_OOZE || o->otyp == GLOB_OF_BROWN_PUDDING \
      || o->otyp == GLOB_OF_GREEN_SLIME || o->otyp == GLOB_OF_BLACK_PUDDING)
+#define is_gollumfood(obj) \
+    (ofood(obj) && ((obj)->corpsenm == PM_PIRANHA        \
+                    || (obj)->corpsenm == PM_GOBLIN      \
+                    || (obj)->corpsenm == PM_HOBGOBLIN   \
+                    || (obj)->corpsenm == PM_BAT         \
+                    || (obj)->corpsenm == PM_GIANT_BAT))
 
 /* Containers */
 #define carried(o) ((o)->where == OBJ_INVENT)
@@ -426,7 +416,13 @@ struct obj {
         "a pair of lenses named the Eyes of the Overworld" is not */    \
      || ((o)->oartifact == ART_EYES_OF_THE_OVERWORLD                    \
          && !undiscovered_artifact(ART_EYES_OF_THE_OVERWORLD)))
-#define pair_of(o) ((o)->otyp == LENSES || is_gloves(o) || is_boots(o))
+#define pair_of(o) \
+    ((o)->otyp == LENSES || (o)->otyp == GOGGLES \
+     || is_gloves(o) || is_boots(o))
+
+#define bypass_forging_rules(obj) \
+    ((obj)->otyp == SADDLE || (obj)->oartifact == ART_MAGICBANE \
+     || (obj)->oartifact == ART_DRAGONBANE)
 
 /* 'PRIZE' values override obj->corpsenm so prizes mustn't be object types
    which use that field for monster type (or other overloaded purpose) */

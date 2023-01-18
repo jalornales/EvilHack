@@ -225,8 +225,8 @@ NEARDATA struct permonst mons[] = {
         M1_ANIMAL | M1_NOHANDS | M1_OMNIVORE | M1_OVIPAROUS, M2_HOSTILE,
         M3_INFRAVISIBLE, 0, 0, 8, CLR_YELLOW),
     MON("pyrolisk", S_COCKATRICE, LVL(6, 6, 6, 30, 0), (G_GENO | 1),
-        A(ATTK(AT_GAZE, AD_FIRE, 2, 6), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
-          NO_ATTK),
+        A(ATTK(AT_GAZE, AD_FIRE, 2, 6), ATTK(AT_BITE, AD_PHYS, 1, 6),
+          NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
         SIZ(30, 30, MS_HISS, MZ_SMALL), MR_POISON | MR_FIRE,
         MR_POISON | MR_FIRE,
         M1_ANIMAL | M1_NOHANDS | M1_OMNIVORE | M1_OVIPAROUS, M2_HOSTILE,
@@ -410,35 +410,38 @@ NEARDATA struct permonst mons[] = {
         M2_HOSTILE | M2_NEUTER, M3_INFRAVISIBLE, 0, 0, 3, CLR_BLUE),
     MON("freezing sphere", S_EYE, LVL(6, 13, 4, 0, 0),
         (G_NOCORPSE | G_NOHELL | 2),
-        A(ATTK(AT_EXPL, AD_COLD, 4, 6), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
-          NO_ATTK),
+        A(ATTK(AT_EXPL, AD_COLD, 4, 6), ATTK(AT_BOOM, AD_COLD, 4, 6), NO_ATTK,
+          NO_ATTK, NO_ATTK, NO_ATTK),
         SIZ(10, 10, MS_SILENT, MZ_SMALL), MR_COLD, MR_COLD,
         M1_FLY | M1_BREATHLESS | M1_NOLIMBS | M1_NOHEAD | M1_MINDLESS
             | M1_NOTAKE,
         M2_HOSTILE | M2_NEUTER, M3_INFRAVISIBLE,
         M4_VULNERABLE_FIRE, 0, 8, CLR_WHITE),
     MON("flaming sphere", S_EYE, LVL(6, 13, 4, 0, 0),
-        (G_NOCORPSE | 2), A(ATTK(AT_EXPL, AD_FIRE, 4, 6), NO_ATTK,
-                                     NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
+        (G_NOCORPSE | 2),
+        A(ATTK(AT_EXPL, AD_FIRE, 4, 6), ATTK(AT_BOOM, AD_FIRE, 4, 6), NO_ATTK,
+          NO_ATTK, NO_ATTK, NO_ATTK),
         SIZ(10, 10, MS_SILENT, MZ_SMALL), MR_FIRE, MR_FIRE,
         M1_FLY | M1_BREATHLESS | M1_NOLIMBS | M1_NOHEAD | M1_MINDLESS
             | M1_NOTAKE,
         M2_HOSTILE | M2_NEUTER, M3_INFRAVISIBLE,
-        M4_VULNERABLE_COLD, 0, 8, CLR_RED),
+        M4_VULNERABLE_COLD, 0, 9, CLR_RED),
     MON("shocking sphere", S_EYE, LVL(6, 13, 4, 0, 0),
-        (G_NOCORPSE | G_GENO | 2), A(ATTK(AT_EXPL, AD_ELEC, 4, 6), NO_ATTK,
-                                     NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
+        (G_NOCORPSE | G_GENO | 2),
+        A(ATTK(AT_EXPL, AD_ELEC, 4, 6), ATTK(AT_BOOM, AD_ELEC, 4, 6), NO_ATTK,
+          NO_ATTK, NO_ATTK, NO_ATTK),
         SIZ(10, 10, MS_SILENT, MZ_SMALL), MR_ELEC, MR_ELEC,
         M1_FLY | M1_BREATHLESS | M1_NOLIMBS | M1_NOHEAD | M1_MINDLESS
             | M1_NOTAKE,
-        M2_HOSTILE | M2_NEUTER, M3_INFRAVISIBLE, 0, 0, 8, HI_ZAP),
+        M2_HOSTILE | M2_NEUTER, M3_INFRAVISIBLE, 0, 0, 9, HI_ZAP),
     MON("acid sphere", S_EYE, LVL(7, 13, 4, 0, 0),
-        (G_NOCORPSE | G_GENO | 2), A(ATTK(AT_EXPL, AD_ACID, 5, 6), NO_ATTK,
-                                     NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
+        (G_NOCORPSE | G_GENO | 2),
+        A(ATTK(AT_EXPL, AD_ACID, 5, 6), ATTK(AT_BOOM, AD_ACID, 4, 6), NO_ATTK,
+          NO_ATTK, NO_ATTK, NO_ATTK),
         SIZ(10, 10, MS_SILENT, MZ_SMALL), MR_ACID, MR_ACID,
         M1_FLY | M1_BREATHLESS | M1_NOLIMBS | M1_NOHEAD | M1_MINDLESS
             | M1_NOTAKE,
-        M2_HOSTILE | M2_NEUTER, M3_INFRAVISIBLE, 0, 0, 10, CLR_YELLOW),
+        M2_HOSTILE | M2_NEUTER, M3_INFRAVISIBLE, 0, 0, 11, CLR_YELLOW),
     MON("magical eye", S_EYE, LVL(8, 6, 0, 90, -10), (2),
         A(ATTK(AT_GAZE, AD_SLOW, 0, 0), ATTK(AT_GAZE, AD_SLEE, 2, 6),
           ATTK(AT_GAZE, AD_STUN, 0, 0), ATTK(AT_GAZE, AD_FIRE, 4, 6),
@@ -561,6 +564,14 @@ NEARDATA struct permonst mons[] = {
           NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
         SIZ(500, 200, MS_HUMANOID, MZ_SMALL), 0, 0, M1_HUMANOID | M1_OMNIVORE,
         M2_COLLECT, M3_INFRAVISIBLE | M3_INFRAVISION, 0, MH_HOBBIT, 3, CLR_BLACK),
+    MON("Gollum", S_HUMANOID, LVL(5, 10, 6, 30, -10), (G_NOGEN | G_UNIQ),
+        A(ATTK(AT_WEAP, AD_PHYS, 2, 4), ATTK(AT_WEAP, AD_SITM, 1, 2),
+          NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK),
+        SIZ(500, 200, MS_CUSS, MZ_SMALL), MR_POISON, 0,
+        M1_HUMANOID | M1_OMNIVORE | M1_SWIM,
+        M2_NOPOLY | M2_HOSTILE | M2_STALK | M2_PNAME | M2_MALE | M2_GREEDY
+            | M2_COLLECT | M2_JEWELS | M2_MAGIC,
+        M3_INFRAVISIBLE | M3_INFRAVISION, 0, MH_HOBBIT, 6, CLR_GRAY),
     MON("dwarf", S_HUMANOID, LVL(0, 6, 10, 10, 4), G_NOGEN, /* placeholder */
         A(ATTK(AT_WEAP, AD_PHYS, 1, 8), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
           NO_ATTK),
@@ -1363,7 +1374,8 @@ NEARDATA struct permonst mons[] = {
         (G_GENO | G_SGROUP | G_NOCORPSE | 3),
         A(ATTK(AT_BITE, AD_ELEC, 1, 1), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
           NO_ATTK),
-        SIZ(15, 10, MS_BUZZ, MZ_TINY), MR_ELEC | MR_POISON, 0, M1_ANIMAL,
+        SIZ(15, 10, MS_BUZZ, MZ_TINY), MR_ELEC | MR_POISON, 0,
+        M1_ANIMAL | M1_NOHANDS,
         M2_HOSTILE, M3_INFRAVISIBLE, 0, 0, 1, CLR_MAGENTA),
     MON("xan", S_XAN, LVL(7, 18, -4, 0, 0), (G_GENO | 3),
         A(ATTK(AT_STNG, AD_LEGS, 1, 4), NO_ATTK, NO_ATTK, NO_ATTK, NO_ATTK,
@@ -1461,7 +1473,7 @@ NEARDATA struct permonst mons[] = {
         M2_NOPOLY | M2_MINION | M2_STALK | M2_STRONG | M2_NASTY | M2_LORD,
         M3_INFRAVISIBLE | M3_INFRAVISION, 0, MH_ANGEL, 21, CLR_BLACK),
     /* You'll only ever be graced by the presence of an Archangel
-     * on the Astral Plane. And one other place... */
+     * on the Astral Plane. And one or two other places... */
     MON("Archangel", S_ANGEL, LVL(18, 16, -6, 70, 15),
         (G_NOGEN | G_NOCORPSE | 1),
         A(ATTK(AT_WEAP, AD_PHYS, 2, 4), ATTK(AT_WEAP, AD_PHYS, 2, 4),
@@ -1694,6 +1706,17 @@ NEARDATA struct permonst mons[] = {
         M1_FLY | M1_THICK_HIDE | M1_NOHANDS | M1_CARNIVORE | M1_ACID,
         M2_HOSTILE | M2_STRONG | M2_GREEDY | M2_JEWELS, 0, 0,
         MH_DRAGON, 13, CLR_YELLOW),
+    MON("baby celestial dragon", S_DRAGON, LVL(24, 15, -2, 50, 0), G_NOGEN,
+        A(ATTK(AT_BITE, AD_PHYS, 4, 8), ATTK(AT_CLAW, AD_PHYS, 4, 6),
+          ATTK(AT_CLAW, AD_PHYS, 4, 6), NO_ATTK, NO_ATTK, NO_ATTK),
+        SIZ(3000, 1000, MS_ROAR, MZ_HUGE),
+        MR_FIRE | MR_COLD | MR_SLEEP | MR_ELEC | MR_ACID
+            | MR_STONE, 0,
+        M1_FLY | M1_THICK_HIDE | M1_NOHANDS | M1_SEE_INVIS
+            | M1_CARNIVORE | M1_REGEN,
+        M2_NOPOLY | M2_HOSTILE | M2_STRONG | M2_GREEDY
+            | M2_JEWELS | M2_MAGIC,
+        0, 0, MH_DRAGON, 26, CLR_BRIGHT_MAGENTA),
     /* From GruntHack - adult dragons can now engulf, and their attack
      * stats are bumped up some.
      */
@@ -1807,6 +1830,18 @@ NEARDATA struct permonst mons[] = {
             | M1_OVIPAROUS | M1_CARNIVORE | M1_ACID,
         M2_HOSTILE | M2_STRONG | M2_NASTY | M2_GREEDY | M2_JEWELS | M2_MAGIC,
         0, 0, MH_DRAGON, 20, CLR_YELLOW),
+    MON("celestial dragon", S_DRAGON, LVL(30, 15, -6, 50, 0), G_NOGEN,
+        A(ATTK(AT_SCRE, AD_LOUD, 16, 4), ATTK(AT_BITE, AD_PHYS, 4, 8),
+          ATTK(AT_CLAW, AD_PHYS, 4, 6), ATTK(AT_CLAW, AD_PHYS, 4, 6),
+          ATTK(AT_MAGC, AD_CLRC, 4, 4), NO_ATTK),
+        SIZ(WT_DRAGON, 5000, MS_ROAR, MZ_GIGANTIC),
+        MR_FIRE | MR_COLD | MR_SLEEP | MR_ELEC | MR_ACID
+            | MR_STONE, MR_SLEEP | MR_ELEC,
+        M1_FLY | M1_THICK_HIDE | M1_NOHANDS | M1_SEE_INVIS
+            | M1_OVIPAROUS | M1_CARNIVORE | M1_REGEN,
+        M2_NOPOLY | M2_HOSTILE | M2_STRONG | M2_NASTY | M2_GREEDY
+            | M2_JEWELS | M2_MAGIC,
+        0, 0, MH_DRAGON, 34, CLR_BRIGHT_MAGENTA),
     /* strictly a placeholder for chromatic dragon scales */
     MON("chromatic dragon", S_DRAGON, LVL(0, 9, -1, 20, -7), G_NOGEN,
         A(ATTK(AT_BREA, AD_RBRE, 6, 6), ATTK(AT_BREA, AD_RBRE, 6, 6),
@@ -2601,7 +2636,7 @@ struct permonst _mons2[] = {
     MON("Nazgul", S_WRAITH, LVL(17, 12, -2, 35, -17),
         (G_NOCORPSE | 1),
         A(ATTK(AT_WEAP, AD_DRLI, 1, 10), ATTK(AT_BREA, AD_SLEE, 2, 25),
-          ATTK(AT_SCRE, AD_LOUD, 2, 8), NO_ATTK, NO_ATTK, NO_ATTK),
+          ATTK(AT_SCRE, AD_LOUD, 4, 4), NO_ATTK, NO_ATTK, NO_ATTK),
         SIZ(WT_HUMAN, 0, MS_SPELL, MZ_HUMAN), MR_COLD | MR_SLEEP | MR_POISON,
         0, M1_BREATHLESS | M1_HUMANOID | M1_SEE_INVIS,
         M2_NOPOLY | M2_STALK | M2_STRONG | M2_HOSTILE | M2_MALE
@@ -3471,7 +3506,7 @@ struct permonst _mons2[] = {
             | M2_PNAME | M2_PRINCE | M2_GREEDY | M2_JEWELS | M2_MAGIC,
         M3_WANTSAMUL | M3_WAITFORU | M3_INFRAVISIBLE | M3_INFRAVISION, 0,
         MH_DEMON | MH_DRAGON, 53, HI_LORD),
-    MON("Graz'zt", S_DEMON, LVL(105, 12, -9, 85, -20),
+    MON("Graz'zt", S_DEMON, LVL(105, 12, -9, 35, -20),
         (G_HELL | G_NOCORPSE | G_NOGEN | G_UNIQ),
         A(ATTK(AT_WEAP, AD_PHYS, 4, 8), ATTK(AT_CLAW, AD_STUN, 6, 6),
           ATTK(AT_MAGC, AD_CLRC, 4, 6), ATTK(AT_CLAW, AD_SITM, 3, 6),
@@ -3505,6 +3540,19 @@ struct permonst _mons2[] = {
             | M2_STRONG | M2_PRINCE | M2_MALE,
         M3_WAITFORU | M3_WANTSAMUL | M3_INFRAVISIBLE | M3_INFRAVISION,
         0, MH_DEMON, 57, HI_LORD),
+    MON("Lucifer", S_DEMON, LVL(110, 15, -1, 99, -20),
+        (G_HELL | G_NOCORPSE | G_NOGEN | G_UNIQ),
+        A(ATTK(AT_WEAP, AD_PHYS, 4, 6), ATTK(AT_CLAW, AD_WTHR, 4, 6),
+          ATTK(AT_MAGC, AD_FIRE, 8, 8), ATTK(AT_MAGC, AD_CLRC, 4, 6),
+          NO_ATTK, NO_ATTK),
+        SIZ(1200, 500, MS_CUSS, MZ_HUGE), MR_FIRE | MR_POISON
+            | MR_ELEC | MR_PSYCHIC, 0,
+        M1_FLY | M1_SEE_INVIS | M1_HUMANOID | M1_POIS,
+        M2_NOPOLY | M2_STALK | M2_HOSTILE | M2_PNAME | M2_NASTY
+            | M2_STRONG | M2_PRINCE | M2_MALE,
+        M3_WAITFORU | M3_CLOSE | M3_WANTSAMUL | M3_ACCURATE
+            | M3_INFRAVISIBLE | M3_INFRAVISION,
+        0, MH_DEMON, 66, HI_LORD),
     /* Riders -- the Four Horsemen of the Apocalypse ("War" == player);
      * depicted with '&' but do not have MH_DEMON set.
      */

@@ -169,7 +169,7 @@ struct trobj {
 
 #define UNDEF_TYP 0
 #define UNDEF_SPE '\177'
-#define RND_SPE (0x80)
+#define RND_SPE 1
 #define UNDEF_BLESS 2
 #define CURSED 3
 
@@ -1324,20 +1324,27 @@ register struct monst *mtmp;
                 break;
             }
         } else if (mm == PM_CROESUS) {
-            (void) mongets(mtmp, TWO_HANDED_SWORD);
-            struct obj* received = m_carrying(mtmp, TWO_HANDED_SWORD);
-            if (received)
-                set_material(received, GOLD);
-            int item = rn2(2) ? BANDED_MAIL : PLATE_MAIL;
+            struct obj* received;
+            int item;
+
+            item = TWO_HANDED_SWORD;
             (void) mongets(mtmp, item);
             received = m_carrying(mtmp, item);
             if (received)
                 set_material(received, GOLD);
+
+            item = rn2(2) ? BANDED_MAIL : PLATE_MAIL;
+            (void) mongets(mtmp, item);
+            received = m_carrying(mtmp, item);
+            if (received)
+                set_material(received, GOLD);
+
             item = rn2(2) ? HELMET : DWARVISH_HELM;
             (void) mongets(mtmp, item);
             received = m_carrying(mtmp, item);
             if (received)
                 set_material(received, GOLD);
+
             item = rn2(2) ? KICKING_BOOTS : DWARVISH_BOOTS;
             (void) mongets(mtmp, item);
             received = m_carrying(mtmp, item);
@@ -1362,7 +1369,7 @@ register struct monst *mtmp;
                and maybe make it special */
             int typ = rn2(2) ? LONG_SWORD : HEAVY_MACE;
             otmp = mksobj(typ, FALSE, FALSE);
-            if ((!rn2(20) || is_lord(ptr))
+            if ((!rn2(20) || is_lord(ptr) || is_prince(ptr))
                 && sgn(mtmp->isminion ? EMIN(mtmp)->min_align
                                       : ptr->maligntyp) == A_LAWFUL) {
                 otmp = oname(otmp, artiname(typ == LONG_SWORD
@@ -1376,9 +1383,10 @@ register struct monst *mtmp;
             otmp->spe = rn2(4);
             (void) mpickobj(mtmp, otmp);
 
-            otmp = mksobj(!rn2(4) || is_lord(ptr) ? SHIELD_OF_REFLECTION
-                                                  : rn2(3) ? LARGE_SHIELD
-                                                           : SHIELD_OF_LIGHT,
+            otmp = mksobj((!rn2(4) || is_lord(ptr) || is_prince(ptr))
+                          ? SHIELD_OF_REFLECTION
+                          : rn2(3) ? LARGE_SHIELD
+                                   : SHIELD_OF_LIGHT,
                           FALSE, FALSE);
             /* uncurse(otmp); -- mksobj(,FALSE,) item is always uncursed */
             otmp->oerodeproof = TRUE;
@@ -1394,7 +1402,7 @@ register struct monst *mtmp;
         break;
 
     case S_HUMANOID:
-        if (is_hobbit(ptr)) {
+        if (is_hobbit(ptr) && !Ingtown) {
             switch (rn2(3)) {
             case 0:
                 (void) mongets(mtmp, DAGGER);
@@ -1716,6 +1724,14 @@ register struct monst *mtmp;
             curse(otmp);
             otmp->spe = rnd(3) + 4;
             set_material(otmp, GEMSTONE);
+            (void) mpickobj(mtmp, otmp);
+            break;
+        case PM_LUCIFER:
+            otmp = mksobj(MORNING_STAR, FALSE, FALSE);
+            otmp->oprops = ITEM_FIRE;
+            curse(otmp);
+            otmp->spe = rnd(3) + 4;
+            set_material(otmp, IRON);
             (void) mpickobj(mtmp, otmp);
             break;
         }
@@ -2101,8 +2117,12 @@ register struct monst *mtmp;
         break;
     case S_ORC:
         if (ptr == &mons[PM_GOBLIN_KING]) {
-            (void) mongets(mtmp, QUARTERSTAFF);
-            struct obj* received = m_carrying(mtmp, QUARTERSTAFF);
+            struct obj* received;
+            int item;
+
+            item = QUARTERSTAFF;
+            (void) mongets(mtmp, item);
+            received = m_carrying(mtmp, item);
             if (received)
                 set_material(received, BONE);
         }
@@ -2663,6 +2683,7 @@ long mmflags;
     if (ptr->msound == MS_LEADER && quest_info(MS_LEADER) == mndx)
         quest_status.leader_m_id = mtmp->m_id;
     mtmp->mnum = mndx;
+    mtmp->former_rank.mnum = NON_PM;
 
     /* set up level and hit points */
     newmonhp(mtmp, mndx);
@@ -2719,6 +2740,10 @@ long mmflags;
     /* Vecna also gets a bit of a boost */
     if (ptr == &mons[PM_VECNA])
         mtmp->mhp = mtmp->mhpmax = 350 + rnd(50);
+
+    /* Lucifer */
+    if (ptr == &mons[PM_LUCIFER])
+        mtmp->mhp = mtmp->mhpmax = 666;
 
     /* Here is where we match riding monsters with their mounts */
     if (!(mmflags & MM_REVIVE)) {
@@ -2858,6 +2883,8 @@ long mmflags;
         mtmp->isvecna = TRUE;
     } else if (mndx == PM_GOBLIN_KING) {
         mtmp->isgking = TRUE;
+    } else if (mndx == PM_LUCIFER) {
+        mtmp->islucifer = TRUE;
     } else if (mndx == PM_WIZARD_OF_YENDOR) {
         mtmp->iswiz = TRUE;
         context.no_of_wizards++;
@@ -3158,9 +3185,11 @@ rndmonst()
                 continue;
             if (Ingtown && !likes_gtown(ptr))
                 continue;
+            if (Inpurg && !likes_purg(ptr))
+                continue;
             ct = (int) (ptr->geno & G_FREQ) + align_shift(ptr);
-	    if (!is_mplayer(ptr))
-	        ct *= 3;
+            if (!is_mplayer(ptr))
+                ct *= 3;
             if (Iniceq && likes_iceq(ptr))
                 ct *= 5;
             if (ct < 0 || ct > 127)
@@ -3676,14 +3705,14 @@ register struct monst *mtmp;
 
     if (always_peaceful(ptr))
         return TRUE;
+
     /* Major demons will sometimes be peaceful to unaligned Infidels.
      * They must pass this 50% check, then the 50% check for chaotics
      * being non-hostile to unaligned, then the usual check for coaligned.
-     * For crowned Infidels, the last two checks are bypassed. */
+     * For crowned Infidels, the random check is bypassed */
     if (always_hostile(ptr)) {
-        if (ual == A_NONE && is_demon(ptr) && rn2(2))
-            return TRUE;
-        else if (ual == A_NONE && u.uevent.uhand_of_elbereth == 4 && is_demon(ptr))
+        if (Role_if(PM_INFIDEL) && is_demon(ptr)
+            && (u.uevent.uhand_of_elbereth || rn2(2)))
             return TRUE;
         else
             return FALSE;
@@ -3711,7 +3740,7 @@ register struct monst *mtmp;
         return FALSE;
 
     /* Chaotic monsters hostile to players with Amulet, except Infidels. */
-    if (mal < A_NEUTRAL && u.uhave.amulet && ual != A_NONE)
+    if (mal < A_NEUTRAL && u.uhave.amulet && !Role_if(PM_INFIDEL))
         return FALSE;
 
     /* minions are hostile to players that have strayed at all */
@@ -3928,6 +3957,13 @@ register struct monst *mtmp;
     } else if (rt == TEMPLE) {
         ap_type = M_AP_FURNITURE;
         appear = S_altar;
+    } else if (rt == GARDEN) {
+        ap_type = M_AP_FURNITURE;
+        if (rn2(3)) {
+            appear = S_tree;
+        } else {
+            appear = S_deadtree;
+        }
 
     /*
      * We won't bother with beehives, morgues, barracks, throne rooms

@@ -193,7 +193,7 @@ const char *verb;
                && (is_pit(t->ttyp) || is_hole(t->ttyp))) {
         ttyp = t->ttyp;
         tseen = t->tseen ? TRUE : FALSE;
-        if (((mtmp = m_at(x, y)) && mtmp->mtrapped)
+        if (((mtmp = m_at(x, y)) != 0 && mtmp->mtrapped)
             || (u.utrap && u.ux == x && u.uy == y)) {
             if (*verb && (cansee(x, y) || distu(x, y) == 0))
                 pline("%s boulder %s into the pit%s.",
@@ -269,7 +269,7 @@ deletedwithboulder:
     } else if (obj->otyp == AMULET_OF_YENDOR
                && (obj->cursed ? rn2(3) : obj->blessed
                                ? !rn2(16) : !rn2(4))
-               && !(is_open_air(x, y))) {
+               && !(is_open_air(x, y) || Is_sanctum(&u.uz))) {
         /* prevent recursive call of teleportation through flooreffects */
         if (!obj->orecursive) {
             if (cansee(x, y))
@@ -304,6 +304,11 @@ deletedwithboulder:
         if (is_puddle(x, y) && !rn2(3)) {
             /* shallow water isn't an endless resource like a pool/moat */
             levl[x][y].typ = ROOM;
+            /* unhide any monsters lurking about */
+            if ((mtmp = m_at(x, y)) != 0) {
+                if (is_swimmer(mtmp->data) && mtmp->mundetected)
+                    mtmp->mundetected = 0;
+            }
             newsym(x, y);
             if (cansee(x, y))
                 pline_The("puddle dries up.");
@@ -1537,6 +1542,14 @@ boolean at_stairs, falling, portal;
         return;
     }
 
+    /* The portal to Purgatory is not active until its guardian
+       is defeated */
+    if (on_level(&u.uz, &sanctum_level)
+        && !u.uevent.ulucifer && portal) {
+        pline("Entrance to Purgatory is blocked while Lucifer still lives.");
+        return;
+    }
+
     /* Prevent the player from accessing either Mine Town or Mines' End
      * unless they have defeated the Goblin King. Using the stairs or
      * falling through a hole or trap door is blocked, but our hero can
@@ -1711,12 +1724,16 @@ boolean at_stairs, falling, portal;
     vision_full_recalc = 0; /* don't let that reenable vision yet */
     flush_screen(-1);       /* ensure all map flushes are postponed */
 
-    if (portal && !In_endgame(&u.uz)) {
+    if (portal && !In_endgame(&u.uz)
+        && !Is_stronghold(&u.uz)) {
         /* find the portal on the new level */
-        register struct trap *ttrap;
+        struct trap *ttrap;
 
         for (ttrap = ftrap; ttrap; ttrap = ttrap->ntrap)
-            if (ttrap->ttyp == MAGIC_PORTAL)
+            /* find the portal with the right destination level */
+            if (ttrap->ttyp == MAGIC_PORTAL
+                && u.uz0.dnum == ttrap->dst.dnum
+                && u.uz0.dlevel == ttrap->dst.dlevel)
                 break;
 
         if (!ttrap)
@@ -1901,6 +1918,19 @@ boolean at_stairs, falling, portal;
 #ifdef MICRO
         display_nhwindow(WIN_MESSAGE, FALSE);
 #endif
+    }
+
+    /* Entered Purgatory */
+    if (!In_purgatory(&u.uz0) && Inpurg
+        && !u.uevent.purgatory_entered) {
+        u.uevent.purgatory_entered = 1;
+        if (!Blind)
+            com_pager(307);
+        if (!u.uachieve.enter_purgatory)
+            livelog_write_string(LL_ACHIEVE, "entered Purgatory");
+        u.uachieve.enter_purgatory = 1;
+        /* force confrontation with Wizard, but only on first arrival */
+        resurrect();
     }
 
     if (familiar) {
@@ -2244,9 +2274,11 @@ long timeout;
 {
     struct obj *body = arg->a_obj;
     struct permonst *mptr = &mons[body->corpsenm];
+    int zmon;
+
     if (!body->zombie_corpse && has_omonst(body) && has_erac(OMONST(body)))
          mptr = r_data(OMONST(body));
-    int zmon = zombie_form(mptr);
+    zmon = zombie_form(mptr);
 
     if (zmon != NON_PM) {
         if (has_omid(body))

@@ -29,36 +29,36 @@ boolean
 elf_can_regen()
 {
     if (maybe_polyd(is_elf(youmonst.data), Race_if(PM_ELF))) {
-	if (uwep && is_iron(uwep)
+        if (uwep && is_iron(uwep)
             && !is_quest_artifact(uwep) && !uarmg)
             return 0;
-	if (uarm && is_iron(uarm) && !uarmu)
+        if (uarm && is_iron(uarm) && !uarmu)
             return 0;
-	if (uarmu && is_iron(uarmu))
+        if (uarmu && is_iron(uarmu))
             return 0;
-	if (uarmc && is_iron(uarmc) && !uarmu && !uarm)
+        if (uarmc && is_iron(uarmc) && !uarmu && !uarm)
             return 0;
-	if (uarmh && is_iron(uarmh)
+        if (uarmh && is_iron(uarmh)
             && !is_quest_artifact(uarmh))
             return 0;
-	if (uarms && is_iron(uarms) && !uarmg)
+        if (uarms && is_iron(uarms) && !uarmg)
             return 0;
-	if (uarmg && is_iron(uarmg))
+        if (uarmg && is_iron(uarmg))
             return 0;
-	if (uarmf && is_iron(uarmf))
+        if (uarmf && is_iron(uarmf))
             return 0;
-	if (uleft && is_iron(uleft))
+        if (uleft && is_iron(uleft))
             return 0;
-	if (uright && is_iron(uright))
+        if (uright && is_iron(uright))
             return 0;
-	if (uamul && is_iron(uamul) && !is_quest_artifact(uamul)
+        if (uamul && is_iron(uamul) && !is_quest_artifact(uamul)
             && !uarmu && !uarm)
             return 0;
-	if (ublindf && is_iron(ublindf))
+        if (ublindf && is_iron(ublindf))
             return 0;
-	if (uchain && is_iron(uchain))
+        if (uchain && is_iron(uchain))
             return 0;
-	if (uswapwep && is_iron(uswapwep)
+        if (uswapwep && is_iron(uswapwep)
             && u.twoweap && !uarmg)
             return 0;
     }
@@ -69,36 +69,36 @@ boolean
 orc_can_regen()
 {
     if (maybe_polyd(is_orc(youmonst.data), Race_if(PM_ORC))) {
-	if (uwep && is_mithril(uwep)
+        if (uwep && is_mithril(uwep)
             && !is_quest_artifact(uwep) && !uarmg)
             return 0;
-	if (uarm && is_mithril(uarm) && !uarmu)
+        if (uarm && is_mithril(uarm) && !uarmu)
             return 0;
-	if (uarmu && is_mithril(uarmu))
+        if (uarmu && is_mithril(uarmu))
             return 0;
-	if (uarmc && is_mithril(uarmc) && !uarmu && !uarm)
+        if (uarmc && is_mithril(uarmc) && !uarmu && !uarm)
             return 0;
-	if (uarmh && is_mithril(uarmh)
+        if (uarmh && is_mithril(uarmh)
             && !is_quest_artifact(uarmh))
             return 0;
-	if (uarms && is_mithril(uarms) && !uarmg)
+        if (uarms && is_mithril(uarms) && !uarmg)
             return 0;
-	if (uarmg && is_mithril(uarmg))
+        if (uarmg && is_mithril(uarmg))
             return 0;
-	if (uarmf && is_mithril(uarmf))
+        if (uarmf && is_mithril(uarmf))
             return 0;
-	if (uleft && is_mithril(uleft))
+        if (uleft && is_mithril(uleft))
             return 0;
-	if (uright && is_mithril(uright))
+        if (uright && is_mithril(uright))
             return 0;
         if (uamul && is_mithril(uamul) && !is_quest_artifact(uamul)
             && !uarmu && !uarm)
             return 0;
-	if (ublindf && is_mithril(ublindf))
+        if (ublindf && is_mithril(ublindf))
             return 0;
-	if (uchain && is_mithril(uchain))
+        if (uchain && is_mithril(uchain))
             return 0;
-	if (uswapwep && is_mithril(uswapwep)
+        if (uswapwep && is_mithril(uswapwep)
             && u.twoweap && !uarmg)
             return 0;
     }
@@ -258,8 +258,8 @@ boolean resuming;
                             monclock = MIN_MONGEN_RATE / 4;
                         if (monclock > MIN_MONGEN_RATE / 6 && u.uevent.udemigod)
                             monclock = MIN_MONGEN_RATE / 6;
-	            }
-		    /* make sure we don't fall off the bottom */
+                    }
+                    /* make sure we don't fall off the bottom */
                     if (monclock < MAX_MONGEN_RATE)
                         monclock = MAX_MONGEN_RATE;
                     if (monclock > MIN_MONGEN_RATE)
@@ -293,9 +293,9 @@ boolean resuming;
                             /* gain a free action on 1/3 of turns */
                             if (rn2(3) == 0)
                                 moveamt += NORMAL_SPEED;
-			} else if (Slow) {
-			    /* average movement noticeably slower */
-			    if (rn2(3) != 0)
+                        } else if (Slow) {
+                            /* average movement noticeably slower */
+                            if (rn2(3) != 0)
                                 moveamt -= NORMAL_SPEED / 2;
                         }
                     }
@@ -520,16 +520,11 @@ boolean resuming;
                         }
                     }
                     restore_attrib();
-                    /* underwater and waterlevel vision are done here */
+                    /* vision will be updated as bubbles move */
                     if (Is_waterlevel(&u.uz) || Is_airlevel(&u.uz))
                         movebubbles();
                     else if (Is_firelevel(&u.uz))
                         fumaroles();
-                    else if (Underwater)
-                        under_water(0);
-                    /* vision while buried done here */
-                    else if (u.uburied)
-                        under_ground(0);
 
                     /* when immobile, count is in turns */
                     if (multi < 0) {
@@ -559,6 +554,8 @@ boolean resuming;
                             || (wielding_artifact(ART_STING)
                                 && racial_orc(mtmp))
                             || (wielding_artifact(ART_ORCRIST)
+                                && racial_orc(mtmp))
+                            || (wielding_artifact(ART_GLAMDRING)
                                 && racial_orc(mtmp))
                             || (wielding_artifact(ART_GRIMTOOTH)
                                 && racial_elf(mtmp))
@@ -617,6 +614,16 @@ boolean resuming;
                 (void) pooleffects(FALSE);
             context.coward = FALSE;
 
+            /* vision while buried or underwater is updated here */
+            if (Underwater && !See_underwater) {
+                under_water(0);
+                docrt();
+            } else if (Underwater) {
+                docrt();
+            } else if (u.uburied) {
+                under_ground(0);
+            }
+
         } /* actual time passed */
 
         /****************************************/
@@ -649,23 +656,56 @@ boolean resuming;
             curs_on_u();
         }
 
-	if (elf_regen != elf_can_regen()) {
+        if (elf_regen != elf_can_regen()) {
             if (!Hallucination)
-	        You_feel("%s.", (elf_regen) ? "itchy" : "relief");
+                You_feel("%s.", (elf_regen) ? "itchy" : "relief");
             else
                 You_feel("%s.", (elf_can_regen()) ? "magnetic"
                                                   : "like... gnarly dude");
-	    elf_regen = elf_can_regen();
-	}
+            elf_regen = elf_can_regen();
+        }
 
-	if (orc_regen != orc_can_regen()) {
+        if (orc_regen != orc_can_regen()) {
             if (!Hallucination)
-	        You_feel("%s.", (orc_regen) ? "tingly" : "relief");
+                You_feel("%s.", (orc_regen) ? "tingly" : "relief");
             else
                 You_feel("%s.", (orc_can_regen()) ? "non-magnetic"
                                                   : "like... whoa");
-	    orc_regen = orc_can_regen();
-	}
+            orc_regen = orc_can_regen();
+        }
+
+        /* The Gauntlets of Purity cannot stay worn if
+           our hero isn't pious */
+        if (!wizard && u.ualign.record < 20 && uarmg
+            && uarmg->oartifact == ART_GAUNTLETS_OF_PURITY) {
+            pline_The("%s sense your impiety, and remove themselves from your %s!",
+                      artiname(uarmg->oartifact), makeplural(body_part(HAND)));
+            /* gauntlets forced off but stay in inventory */
+            (void) Gloves_off();
+            /* any wielded/worn objects are forced to drop,
+               even if cursed */
+            if (u.twoweap) {
+                Your("%s and %s are forced from your %s!",
+                     simpleonames(uwep), simpleonames(uswapwep),
+                     makeplural(body_part(HAND)));
+                dropx(uswapwep);
+                dropx(uwep);
+            } else if (uwep && uarms) {
+                Your("%s and %s are forced from your %s!",
+                     simpleonames(uwep), simpleonames(uarms),
+                     makeplural(body_part(HAND)));
+                (void) Shield_off();
+                dropx(uwep);
+            } else if (!uwep && uarms) {
+                Your("%s is forced from your %s!",
+                     simpleonames(uarms), body_part(HAND));
+                (void) Shield_off();
+            } else if (uwep) {
+                Your("%s is forced from your %s!",
+                     simpleonames(uwep), body_part(HAND));
+                dropx(uwep);
+            }
+        }
 
         context.move = 1;
 
@@ -965,9 +1005,9 @@ newgame()
     if (flags.legacy) {
         flush_screen(1);
         if (Role_if(PM_CONVICT)) {
-	    com_pager(199);
+            com_pager(199);
         } else {
-	    com_pager(1);
+            com_pager(1);
         }
     }
 

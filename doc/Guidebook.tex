@@ -1574,6 +1574,11 @@ Bury objects under and around you.
 Autocompletes.
 Debug mode only.
 %.lp
+\item[\tb{\#wizcrown}]
+Become crowned.
+Autocompletes.
+Debug mode only.
+%.lp
 \item[\tb{\#wizdetect}]
 Search for hidden things (secret doors or traps or unseen monsters)
 within a modest radius.
@@ -1611,6 +1616,11 @@ Autocompletes.
 Debug mode only.
 Default key is `{\tt \^{}V}'.
 %.lp
+\item[\tb{\#wizmakemap}]
+Recreate the current level.
+Autocompletes.
+Debug mode only.
+%.lp
 \item[\tb{\#wizmap}]
 Map the level.
 Autocompletes.
@@ -1624,6 +1634,17 @@ Debug mode only.
 %.lp
 \item[\tb{\#wizsmell}]
 Smell monster.
+Autocompletes.
+Debug mode only.
+%.lp
+\item[\tb{\#wizspell}]
+Cast any spell by name without cost or failure as an expert.
+Autocompletes.
+Debug mode only.
+Default key is `{\tt \^{}S}'.
+%.lp
+\item[\tb{\#wiztelekinesis}]
+Hurtle a monster across the map.
 Autocompletes.
 Debug mode only.
 %.lp
@@ -3787,6 +3808,14 @@ Selects your race (for example, ``{\tt race:human}'').  Default is random.
 If you prefix the value with `{\tt !}' or ``{\tt no}'', you will
 exclude that race from being picked randomly.
 Cannot be set with the `{\tt O}' command.  Persistent.
+%.lp
+\item[\ib{realtime}]
+Display various types of time to show on the status bar.
+Default is wallclock time.  Persistent.
+%.lp
+\item[\ib{realtime\verb+_+format}]
+The format used by the realtime display.
+Default is fixed units (hh:mm:ss).  Persistent.
 %.lp
 \item[\ib{rest\verb+_+on\verb+_+space}]
 Make the space bar a synonym for the `{\tt .}' (\#wait) command (default off).

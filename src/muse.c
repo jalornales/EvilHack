@@ -42,6 +42,7 @@ STATIC_DCL boolean FDECL(muse_unslime, (struct monst *, struct obj *,
 STATIC_DCL int FDECL(cures_sliming, (struct monst *, struct obj *));
 STATIC_DCL boolean FDECL(green_mon, (struct monst *));
 
+STATIC_DCL int FDECL(charge_precedence, (int));
 STATIC_DCL boolean FDECL(find_offensive_recurse, (struct monst *, struct obj *,
                                                   struct monst *, BOOLEAN_P));
 STATIC_DCL boolean FDECL(find_defensive_recurse, (struct monst *, struct obj *));
@@ -558,22 +559,22 @@ struct monst *mtmp;
         ; /* fleeing by stairs or traps is not possible */
     } else if (levl[x][y].typ == STAIRS) {
         if (x == xdnstair && y == ydnstair) {
-            if (!is_floater(mtmp->data))
+            if (!(is_floater(mtmp->data) || can_levitate(mtmp)))
                 m.has_defense = MUSE_DOWNSTAIRS;
         } else if (x == xupstair && y == yupstair) {
             m.has_defense = MUSE_UPSTAIRS;
         } else if (sstairs.sx && x == sstairs.sx && y == sstairs.sy) {
-            if (sstairs.up || !is_floater(mtmp->data))
+            if (sstairs.up || !(is_floater(mtmp->data) || can_levitate(mtmp)))
                 m.has_defense = MUSE_SSTAIRS;
         }
     } else if (levl[x][y].typ == LADDER) {
         if (x == xupladder && y == yupladder) {
             m.has_defense = MUSE_UP_LADDER;
         } else if (x == xdnladder && y == ydnladder) {
-            if (!is_floater(mtmp->data))
+            if (!(is_floater(mtmp->data) || can_levitate(mtmp)))
                 m.has_defense = MUSE_DN_LADDER;
         } else if (sstairs.sx && x == sstairs.sx && y == sstairs.sy) {
-            if (sstairs.up || !is_floater(mtmp->data))
+            if (sstairs.up || !(is_floater(mtmp->data) || can_levitate(mtmp)))
                 m.has_defense = MUSE_SSTAIRS;
         }
     } else {
@@ -616,6 +617,7 @@ struct monst *mtmp;
             /* use trap if it's the correct type */
             if (is_hole(t->ttyp)
                 && !is_floater(mtmp->data)
+                && !can_levitate(mtmp)
                 && !mtmp->isshk && !mtmp->isgd && !mtmp->ispriest
                 && Can_fall_thru(&u.uz)) {
                 trapx = xx;
@@ -682,6 +684,7 @@ struct monst *mtmp;
         if (obj->otyp == WAN_DIGGING && obj->spe > 0 && !stuck && !t
             && !mtmp->isshk && !mtmp->isgd && !mtmp->ispriest
             && !is_floater(mtmp->data)
+            && !can_levitate(mtmp)
             /* monsters digging in Sokoban can ruin things */
             && !Sokoban
             /* digging wouldn't be effective; assume they know that */
@@ -800,6 +803,7 @@ struct obj *start;
         if (obj->otyp == WAN_DIGGING && obj->spe > 0 && !stuck && !t
             && !mtmp->isshk && !mtmp->isgd && !mtmp->ispriest
             && !is_floater(mtmp->data)
+            && !can_levitate(mtmp)
             /* monsters digging in Sokoban can ruin things */
             && !Sokoban
             /* digging wouldn't be effective; assume they know that */
@@ -1424,7 +1428,7 @@ struct monst *mtmp;
 #define MUSE_FROST_HORN 12
 #define MUSE_FIRE_HORN 13
 #define MUSE_POT_ACID 14
-/*#define MUSE_WAN_TELEPORTATION 15*/
+#define MUSE_WAN_TELEPORTATION 15
 #define MUSE_POT_SLEEPING 16
 #define MUSE_SCR_EARTH 17
 #define MUSE_WAN_CANCELLATION 18
@@ -1436,6 +1440,8 @@ struct monst *mtmp;
 /*#define MUSE_WAN_UNDEAD_TURNING 24*/ /* also a defensive item so don't
                                         * redefine; nonconsecutive value is ok */
 #define MUSE_POT_OIL 25
+#define MUSE_CAMERA 26
+#define MUSE_WAN_SLOW_MONSTER 27
 
 static boolean
 linedup_chk_corpse(x, y)
@@ -1504,13 +1510,13 @@ struct monst *mtmp;
     if (target) {
         if (target == &youmonst)
             reflection_skip = m_seenres(mtmp, M_SEEN_REFL) != 0
-                              || monnear(mtmp, mtmp->mux, mtmp->muy);
+                              || (monnear(mtmp, mtmp->mux, mtmp->muy) && !rn2(3));
     } else {
         return FALSE; /* nothing to attack */
     }
 
     m.offensive = (struct obj *) 0;
-    m.tocharge = 0;
+    m.tocharge = (struct obj *) 0;
     m.has_offense = 0;
     if (mtmp->mpeaceful || is_animal(mtmp->data) || mindless(mtmp->data)
         || nohands(mtmp->data))
@@ -1531,6 +1537,59 @@ struct monst *mtmp;
                                   reflection_skip);
 }
 
+STATIC_OVL int
+charge_precedence(otyp)
+int otyp;
+{
+    int want = 0;
+    switch (otyp) {
+    /* in order of priority, highest being on top */
+    case WAN_WISHING:
+        want++;
+        /*FALLTHRU*/
+    case WAN_DEATH:
+        want++;
+        /*FALLTHRU*/
+    case WAN_SLEEP:
+        want++;
+        /*FALLTHRU*/
+    case WAN_FIRE:
+        want++;
+        /*FALLTHRU*/
+    case FIRE_HORN:
+        want++;
+        /*FALLTHRU*/
+    case WAN_COLD:
+        want++;
+        /*FALLTHRU*/
+    case FROST_HORN:
+        want++;
+        /*FALLTHRU*/
+    case WAN_LIGHTNING:
+        want++;
+        /*FALLTHRU*/
+    case WAN_MAGIC_MISSILE:
+        want++;
+        /*FALLTHRU*/
+    case WAN_CANCELLATION:
+        want++;
+        /*FALLTHRU*/
+    case WAN_POLYMORPH:
+        want++;
+        /*FALLTHRU*/
+    case WAN_STRIKING:
+        want++;
+        /*FALLTHRU*/
+    case WAN_TELEPORTATION:
+        want++;
+        /*FALLTHRU*/
+    case WAN_SLOW_MONSTER:
+        want++;
+    }
+
+    return want;
+}
+
 STATIC_OVL boolean
 find_offensive_recurse(mtmp, start, target, reflection_skip)
 struct monst *mtmp;
@@ -1543,6 +1602,10 @@ boolean reflection_skip;
     struct obj *charge_scroll = (struct obj *) 0;
 
 #define nomore(x)       if (m.has_offense == x) continue;
+#define pick_to_charge(o) \
+    (mcarried(o) && (!m.tocharge \
+                     || (charge_precedence((o)->otyp) \
+                         > charge_precedence(m.tocharge->otyp))))
     /* this picks the last viable item rather than prioritizing choices */
     for (obj = start; obj; obj = obj->nobj) {
         if (Is_container(obj)) {
@@ -1556,160 +1619,149 @@ boolean reflection_skip;
             if (obj->otyp == WAN_DEATH) {
                 if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_MAGR)
                     && (!m_seenres(mtmp, M_SEEN_REFL)
-                        || nonliving(mtmp->data) || mtmp->data->msound == MS_LEADER)) {
+                        || nonliving(mtmp->data)
+                        || mtmp->data->msound == MS_LEADER)) {
                     m.offensive = obj;
                     m.has_offense = MUSE_WAN_DEATH;
-                } else if (!m.tocharge || obj->spe < 1) {
+                } else if (obj->spe < 1 && pick_to_charge(obj)) {
                     m.tocharge = obj;
                 }
+                continue;
             }
             nomore(MUSE_WAN_SLEEP);
             if (obj->otyp == WAN_SLEEP && multi >= 0) {
                 if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_SLEEP)) {
                     m.offensive = obj;
                     m.has_offense = MUSE_WAN_SLEEP;
-                } else if (!m.tocharge || obj->spe < 1
-                           || m.tocharge->otyp != WAN_DEATH) {
+                } else if (obj->spe < 1 && pick_to_charge(obj)) {
                     m.tocharge = obj;
                 }
+                continue;
             }
             nomore(MUSE_WAN_FIRE);
             if (obj->otyp == WAN_FIRE) {
                 if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_FIRE)) {
                     m.offensive = obj;
                     m.has_offense = MUSE_WAN_FIRE;
-                } else if (!m.tocharge || obj->spe < 1
-                           || (m.tocharge->otyp != WAN_DEATH
-                               && m.tocharge->otyp != WAN_SLEEP)) {
+                } else if (obj->spe < 1 && pick_to_charge(obj)) {
                     m.tocharge = obj;
                 }
+                continue;
             }
             nomore(MUSE_FIRE_HORN);
             if (obj->otyp == FIRE_HORN && can_blow(mtmp)) {
                 if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_FIRE)) {
                     m.offensive = obj;
                     m.has_offense = MUSE_FIRE_HORN;
-                } else if (!m.tocharge || obj->spe < 1
-                           || (m.tocharge->otyp != WAN_DEATH
-                               && m.tocharge->otyp != WAN_SLEEP
-                               && m.tocharge->otyp != WAN_FIRE)) {
+                } else if (obj->spe < 1 && pick_to_charge(obj)) {
                     m.tocharge = obj;
                 }
+                continue;
             }
             nomore(MUSE_WAN_COLD);
             if (obj->otyp == WAN_COLD) {
                 if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_COLD)) {
                     m.offensive = obj;
                     m.has_offense = MUSE_WAN_COLD;
-                } else if (!m.tocharge || obj->spe < 1
-                           || (m.tocharge->otyp != WAN_DEATH
-                               && m.tocharge->otyp != WAN_SLEEP
-                               && m.tocharge->otyp != WAN_FIRE
-                               && m.tocharge->otyp != FIRE_HORN)) {
+                } else if (obj->spe < 1 && pick_to_charge(obj)) {
                     m.tocharge = obj;
                 }
+                continue;
             }
             nomore(MUSE_FROST_HORN);
             if (obj->otyp == FROST_HORN && can_blow(mtmp)) {
                 if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_COLD)) {
                     m.offensive = obj;
                     m.has_offense = MUSE_FROST_HORN;
-                } else if (!m.tocharge || obj->spe < 1
-                           || (m.tocharge->otyp != WAN_DEATH
-                               && m.tocharge->otyp != WAN_SLEEP
-                               && m.tocharge->otyp != WAN_FIRE
-                               && m.tocharge->otyp != FIRE_HORN
-                               && m.tocharge->otyp != WAN_COLD)) {
+                } else if (obj->spe < 1 && pick_to_charge(obj)) {
                     m.tocharge = obj;
                 }
+                continue;
             }
             nomore(MUSE_WAN_LIGHTNING);
             if (obj->otyp == WAN_LIGHTNING) {
                 if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_ELEC)) {
                     m.offensive = obj;
                     m.has_offense = MUSE_WAN_LIGHTNING;
-                } else if (!m.tocharge || obj->spe < 1
-                           || (m.tocharge->otyp != WAN_DEATH
-                               && m.tocharge->otyp != WAN_SLEEP
-                               && m.tocharge->otyp != WAN_FIRE
-                               && m.tocharge->otyp != FIRE_HORN
-                               && m.tocharge->otyp != WAN_COLD
-                               && m.tocharge->otyp != FROST_HORN)) {
+                } else if (obj->spe < 1 && pick_to_charge(obj)) {
                     m.tocharge = obj;
                 }
+                continue;
             }
             nomore(MUSE_WAN_MAGIC_MISSILE);
             if (obj->otyp == WAN_MAGIC_MISSILE) {
                 if (obj->spe > 0) {
                     m.offensive = obj;
                     m.has_offense = MUSE_WAN_MAGIC_MISSILE;
-                } else if (!m.tocharge || obj->spe < 1
-                           || (m.tocharge->otyp != WAN_DEATH
-                               && m.tocharge->otyp != WAN_SLEEP
-                               && m.tocharge->otyp != WAN_FIRE
-                               && m.tocharge->otyp != FIRE_HORN
-                               && m.tocharge->otyp != WAN_COLD
-                               && m.tocharge->otyp != FROST_HORN
-                               && m.tocharge->otyp != WAN_LIGHTNING)) {
+                } else if (obj->spe < 1 && pick_to_charge(obj)) {
                     m.tocharge = obj;
                 }
+                continue;
             }
         }
+
         nomore(MUSE_WAN_UNDEAD_TURNING);
         m_use_undead_turning(mtmp, obj);
+
         nomore(MUSE_WAN_CANCELLATION);
         if (obj->otyp == WAN_CANCELLATION) {
             if (obj->spe > 0) {
                 m.offensive = obj;
                 m.has_offense = MUSE_WAN_CANCELLATION;
-            } else if (!m.tocharge || obj->spe < 1
-                       || (m.tocharge->otyp != WAN_DEATH
-                           && m.tocharge->otyp != WAN_SLEEP
-                           && m.tocharge->otyp != WAN_FIRE
-                           && m.tocharge->otyp != FIRE_HORN
-                           && m.tocharge->otyp != WAN_COLD
-                           && m.tocharge->otyp != FROST_HORN
-                           && m.tocharge->otyp != WAN_LIGHTNING
-                           && m.tocharge->otyp != WAN_MAGIC_MISSILE)) {
+            } else if (obj->spe < 1 && pick_to_charge(obj)) {
                 m.tocharge = obj;
             }
+            continue;
         }
         nomore(MUSE_WAN_POLYMORPH);
         if (obj->otyp == WAN_POLYMORPH) {
             if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_MAGR)) {
                 m.offensive = obj;
                 m.has_offense = MUSE_WAN_POLYMORPH;
-            } else if (!m.tocharge || obj->spe < 1
-                       || (m.tocharge->otyp != WAN_DEATH
-                           && m.tocharge->otyp != WAN_SLEEP
-                           && m.tocharge->otyp != WAN_FIRE
-                           && m.tocharge->otyp != FIRE_HORN
-                           && m.tocharge->otyp != WAN_COLD
-                           && m.tocharge->otyp != FROST_HORN
-                           && m.tocharge->otyp != WAN_LIGHTNING
-                           && m.tocharge->otyp != WAN_MAGIC_MISSILE
-                           && m.tocharge->otyp != WAN_CANCELLATION)) {
+            } else if (obj->spe < 1 && pick_to_charge(obj)) {
                 m.tocharge = obj;
             }
+            continue;
         }
         nomore(MUSE_WAN_STRIKING);
         if (obj->otyp == WAN_STRIKING) {
             if (obj->spe > 0 && !m_seenres(mtmp, M_SEEN_MAGR)) {
                 m.offensive = obj;
                 m.has_offense = MUSE_WAN_STRIKING;
-            } else if (!m.tocharge || obj->spe < 1
-                       || (m.tocharge->otyp != WAN_DEATH
-                           && m.tocharge->otyp != WAN_SLEEP
-                           && m.tocharge->otyp != WAN_FIRE
-                           && m.tocharge->otyp != FIRE_HORN
-                           && m.tocharge->otyp != WAN_COLD
-                           && m.tocharge->otyp != FROST_HORN
-                           && m.tocharge->otyp != WAN_LIGHTNING
-                           && m.tocharge->otyp != WAN_MAGIC_MISSILE
-                           && m.tocharge->otyp != WAN_CANCELLATION
-                           && m.tocharge->otyp != WAN_POLYMORPH)) {
+            } else if (obj->spe < 1 && pick_to_charge(obj)) {
                 m.tocharge = obj;
             }
+            continue;
+        }
+        /* use_offensive() has had some code to support wand of teleportation
+         * for a long time, but find_offensive() never selected one;
+         * re-enable it */
+        nomore(MUSE_WAN_TELEPORTATION);
+        if (obj->otyp == WAN_TELEPORTATION) {
+            if (obj->spe > 0
+                /* don't give controlled hero a free teleport */
+                && !Teleport_control
+                /* same hack as MUSE_WAN_TELEPORTATION_SELF */
+                && (!level.flags.noteleport
+                    || !(mtmp->mtrapseen & (1 << (TELEP_TRAP - 1))))
+                /* do try to move hero to a more vulnerable spot */
+                && (onscary(u.ux, u.uy, mtmp)
+                    || (u.ux == sstairs.sx && u.uy == sstairs.sy))) {
+                m.offensive = obj;
+                m.has_offense = MUSE_WAN_TELEPORTATION;
+            } else if (obj->spe < 1 && pick_to_charge(obj)) {
+                m.tocharge = obj;
+            }
+            continue;
+        }
+        nomore(MUSE_WAN_SLOW_MONSTER);
+        /* don't bother recharging this one */
+        if (obj->otyp == WAN_SLOW_MONSTER) {
+            if (obj->spe > 0 && !Slow) {
+                m.offensive = obj;
+                m.has_offense = MUSE_WAN_SLOW_MONSTER;
+            }
+            continue;
         }
         if (m.has_offense == MUSE_SCR_CHARGING && m.tocharge)
             continue;
@@ -1717,8 +1769,10 @@ boolean reflection_skip;
             if (m.tocharge) {
                 m.offensive = obj;
                 m.has_offense = MUSE_SCR_CHARGING;
-            } else if (!charge_scroll)
+            } else if (!charge_scroll) {
                 charge_scroll = obj;
+            }
+            continue;
         }
         nomore(MUSE_SCR_STINKING_CLOUD)
         if (obj->otyp == SCR_STINKING_CLOUD && m_canseeu(mtmp)
@@ -1804,6 +1858,14 @@ boolean reflection_skip;
             m.offensive = obj;
             m.has_offense = MUSE_SCR_FIRE;
         }
+        nomore(MUSE_CAMERA);
+        if (obj->otyp == EXPENSIVE_CAMERA
+            && (!Blind || hates_light(youmonst.data))
+            && dist2(mtmp->mx, mtmp->my, mtmp->mux, mtmp->muy) <= 2
+            && obj->spe > 0 && !rn2(6)) {
+            m.offensive = obj;
+            m.has_offense = MUSE_CAMERA;
+        }
     }
     if (m.has_offense == 0 && m.tocharge && charge_scroll) {
         m.offensive = charge_scroll;
@@ -1811,6 +1873,7 @@ boolean reflection_skip;
     }
     return(boolean) !!m.has_offense;
 #undef nomore
+#undef pick_to_charge
 }
 
 extern struct monst *last_hurtled;
@@ -1888,7 +1951,7 @@ register struct obj *otmp;
                 makeknown(WAN_STRIKING);
         }
         break;
-#if 0   /* disabled because find_offensive() never picks WAN_TELEPORTATION */
+   /* disabled because find_offensive() never picks WAN_TELEPORTATION */
     case WAN_TELEPORTATION:
         if (hits_you) {
             tele();
@@ -1903,7 +1966,6 @@ register struct obj *otmp;
                 (void) rloc(mtmp, TRUE);
         }
         break;
-#endif
     case WAN_POLYMORPH:
         if (hits_you) {
             if (Antimagic) {
@@ -1979,6 +2041,14 @@ register struct obj *otmp;
             makeknown(WAN_UNDEAD_TURNING);
         break;
     }
+    case WAN_SLOW_MONSTER:
+        if (hits_you) {
+            if (!Slow)
+                u_slow_down();
+        }
+        if (zap_oseen)
+            makeknown(WAN_SLOW_MONSTER);
+        break;
     default:
         break;
     }
@@ -2161,6 +2231,7 @@ struct monst *mtmp;
                      (otmp->blessed) ? 1 : 0, mtmp);
         }
         m_useup(mtmp, otmp);
+        m.tocharge = (struct obj *) 0; /* clear m.tocharge */
         return (DEADMONSTER(mtmp)) ? 1 : 2;
     case MUSE_WAN_DEATH:
     case MUSE_WAN_SLEEP:
@@ -2191,6 +2262,7 @@ struct monst *mtmp;
     case MUSE_WAN_POLYMORPH:
     case MUSE_WAN_UNDEAD_TURNING:
     case MUSE_WAN_STRIKING:
+    case MUSE_WAN_SLOW_MONSTER:
         zap_oseen = oseen;
         mzapwand(mtmp, otmp, FALSE);
         m_using = TRUE;
@@ -2242,7 +2314,7 @@ struct monst *mtmp;
         }
 
         return (DEADMONSTER(mtmp)) ? 1 : 2;
-    }
+    } /* case MUSE_SCR_EARTH */
     case MUSE_SCR_FIRE: {
         boolean vis = cansee(mtmp->mx, mtmp->my);
 
@@ -2289,7 +2361,23 @@ struct monst *mtmp;
             }
         }
         return 2;
-    }
+    } /* case MUSE_SCR_FIRE */
+    case MUSE_CAMERA: {
+        if (Hallucination)
+            verbalize("Say cheese!");
+        else
+            pline("%s takes a picture of you with %s!",
+                  Monnam(mtmp), an(xname(otmp)));
+        m_using = TRUE;
+        if (!Blind) {
+            You("are blinded by the flash of light!");
+            make_blinded(Blinded + (long) rnd(1 + 50), FALSE);
+        }
+        lightdamage(otmp, TRUE, 5);
+        m_using = FALSE;
+        otmp->spe--;
+        return 1;
+    } /* case MUSE_CAMERA */
     case MUSE_POT_PARALYSIS:
     case MUSE_POT_BLINDNESS:
     case MUSE_POT_CONFUSION:
@@ -2406,6 +2494,8 @@ struct monst *mtmp;
         return SCR_STINKING_CLOUD;
     case 14:
         return WAN_CANCELLATION;
+    case 15:
+        return WAN_SLOW_MONSTER;
     }
     /*NOTREACHED*/
     return 0;
@@ -2434,6 +2524,7 @@ struct monst *mtmp;
     struct permonst *mdat = mtmp->data;
     int x = mtmp->mx, y = mtmp->my;
     struct trap *t;
+    struct obj *charge_scroll = (struct obj *) 0;
     int xx, yy, pmidx = NON_PM;
     boolean immobile = (mdat->mmove == 0);
     boolean stuck = (mtmp == u.ustuck);
@@ -2480,6 +2571,10 @@ struct monst *mtmp;
         return 0;
 
 #define nomore(x)       if (m.has_misc == (x)) continue
+#define pick_to_charge(o) \
+    (mcarried(o) && (!m.tocharge \
+                     || (charge_precedence((o)->otyp) \
+                         > charge_precedence(m.tocharge->otyp))))
     /*
      * [bug?]  Choice of item is not prioritized; the last viable one
      * in the monster's inventory will be chosen.
@@ -2501,9 +2596,14 @@ struct monst *mtmp;
             m.has_misc = MUSE_FIGURINE;
         }
         nomore(MUSE_WAN_WISHING);
-        if (obj->otyp == WAN_WISHING && obj->spe > 0) {
-            m.misc = obj;
-            m.has_misc = MUSE_WAN_WISHING;
+        if (obj->otyp == WAN_WISHING) {
+            if (obj->spe > 0) {
+                m.misc = obj;
+                m.has_misc = MUSE_WAN_WISHING;
+            } else if (obj->spe < 1 && pick_to_charge(obj)) {
+                m.tocharge = obj;
+            }
+            continue;
         }
         nomore(MUSE_BULLWHIP);
         if (obj->otyp == BULLWHIP && !mtmp->mpeaceful
@@ -2553,11 +2653,13 @@ struct monst *mtmp;
          * invisible unless you can see them.  Not really right, but...
          */
         nomore(MUSE_WAN_MAKE_INVISIBLE);
-        if (obj->otyp == WAN_MAKE_INVISIBLE && obj->spe > 0 && !mtmp->minvis
+        if (obj->otyp == WAN_MAKE_INVISIBLE && !mtmp->minvis
             && !mtmp->invis_blkd && (!mtmp->mpeaceful || See_invisible)
             && (!attacktype(mtmp->data, AT_GAZE) || mtmp->mcan)) {
-            m.misc = obj;
-            m.has_misc = MUSE_WAN_MAKE_INVISIBLE;
+            if (obj->spe > 0) {
+                m.misc = obj;
+                m.has_misc = MUSE_WAN_MAKE_INVISIBLE;
+            }
         }
         nomore(MUSE_POT_INVISIBILITY);
         if (obj->otyp == POT_INVISIBILITY && !mtmp->minvis
@@ -2567,10 +2669,12 @@ struct monst *mtmp;
             m.has_misc = MUSE_POT_INVISIBILITY;
         }
         nomore(MUSE_WAN_SPEED_MONSTER);
-        if (obj->otyp == WAN_SPEED_MONSTER && obj->spe > 0
+        if (obj->otyp == WAN_SPEED_MONSTER
             && mtmp->mspeed != MFAST && !mtmp->isgd) {
-            m.misc = obj;
-            m.has_misc = MUSE_WAN_SPEED_MONSTER;
+            if (obj->spe > 0) {
+                m.misc = obj;
+                m.has_misc = MUSE_WAN_SPEED_MONSTER;
+            }
         }
         nomore(MUSE_POT_SPEED);
         if (obj->otyp == POT_SPEED && mtmp->mspeed != MFAST && !mtmp->isgd) {
@@ -2578,17 +2682,30 @@ struct monst *mtmp;
             m.has_misc = MUSE_POT_SPEED;
         }
         nomore(MUSE_WAN_POLYMORPH_SELF);
-        if (obj->otyp == WAN_POLYMORPH && obj->spe > 0
+        if (obj->otyp == WAN_POLYMORPH
             && (mtmp->cham == NON_PM) && !mtmp->isshk
             && mons[monsndx(mdat)].difficulty < 6) {
-            m.misc = obj;
-            m.has_misc = MUSE_WAN_POLYMORPH_SELF;
+            if (obj->spe > 0) {
+                m.misc = obj;
+                m.has_misc = MUSE_WAN_POLYMORPH_SELF;
+            }
         }
         nomore(MUSE_POT_POLYMORPH);
         if (obj->otyp == POT_POLYMORPH && (mtmp->cham == NON_PM)
             && !mtmp->isshk && mons[monsndx(mdat)].difficulty < 6) {
             m.misc = obj;
             m.has_misc = MUSE_POT_POLYMORPH;
+        }
+        if (m.has_misc == MUSE_SCR_CHARGING && m.tocharge)
+            continue;
+        if (obj->otyp == SCR_CHARGING) {
+            if (m.tocharge) {
+                m.misc = obj;
+                m.has_misc = MUSE_SCR_CHARGING;
+            } else if (!charge_scroll) {
+                charge_scroll = obj;
+            }
+            continue;
         }
         nomore(MUSE_SCR_REMOVE_CURSE);
         if (obj->otyp == SCR_REMOVE_CURSE
@@ -2607,8 +2724,13 @@ struct monst *mtmp;
             }
         }
     }
+    if (m.has_misc == 0 && m.tocharge && charge_scroll) {
+        m.misc = charge_scroll;
+        m.has_misc = MUSE_SCR_CHARGING;
+    }
     return find_misc_recurse(mtmp, mtmp->minvent);
 #undef nomore
+#undef pick_to_charge
 }
 
 STATIC_OVL boolean
@@ -2618,7 +2740,13 @@ struct obj *start;
 {
     register struct obj *obj;
     struct permonst *mdat = mtmp->data;
-#define nomore(x) if (m.has_misc == (x)) continue;
+    struct obj *charge_scroll = (struct obj *) 0;
+#define nomore(x)       if (m.has_misc == (x)) continue;
+#define pick_to_charge(o) \
+    (mcarried(o) && (!m.tocharge \
+                     || (charge_precedence((o)->otyp) \
+                         > charge_precedence(m.tocharge->otyp))))
+
     for (obj = start; obj; obj = obj->nobj) {
         if (Is_container(obj)) {
             (void) find_misc_recurse(mtmp, obj->cobj);
@@ -2643,9 +2771,10 @@ struct obj *start;
             if (obj->spe > 0) {
                 m.misc = obj;
                 m.has_misc = MUSE_WAN_WISHING;
-            } else if (!m.tocharge) {
+            } else if (obj->spe < 1 && pick_to_charge(obj)) {
                 m.tocharge = obj;
             }
+            continue;
         }
         nomore(MUSE_BULLWHIP);
         if (obj->otyp == BULLWHIP && !mtmp->mpeaceful
@@ -2695,11 +2824,13 @@ struct obj *start;
          * invisible unless you can see them.  Not really right, but...
          */
         nomore(MUSE_WAN_MAKE_INVISIBLE);
-        if (obj->otyp == WAN_MAKE_INVISIBLE && obj->spe > 0 && !mtmp->minvis
+        if (obj->otyp == WAN_MAKE_INVISIBLE && !mtmp->minvis
             && !mtmp->invis_blkd && (!mtmp->mpeaceful || See_invisible)
             && (!attacktype(mtmp->data, AT_GAZE) || mtmp->mcan)) {
-            m.misc = obj;
-            m.has_misc = MUSE_WAN_MAKE_INVISIBLE;
+            if (obj->spe > 0) {
+                m.misc = obj;
+                m.has_misc = MUSE_WAN_MAKE_INVISIBLE;
+            }
         }
         nomore(MUSE_POT_INVISIBILITY);
         if (obj->otyp == POT_INVISIBILITY && !mtmp->minvis
@@ -2709,10 +2840,12 @@ struct obj *start;
             m.has_misc = MUSE_POT_INVISIBILITY;
         }
         nomore(MUSE_WAN_SPEED_MONSTER);
-        if (obj->otyp == WAN_SPEED_MONSTER && obj->spe > 0
+        if (obj->otyp == WAN_SPEED_MONSTER
             && mtmp->mspeed != MFAST && !mtmp->isgd) {
-            m.misc = obj;
-            m.has_misc = MUSE_WAN_SPEED_MONSTER;
+            if (obj->spe > 0) {
+                m.misc = obj;
+                m.has_misc = MUSE_WAN_SPEED_MONSTER;
+            }
         }
         nomore(MUSE_POT_SPEED);
         if (obj->otyp == POT_SPEED && mtmp->mspeed != MFAST && !mtmp->isgd) {
@@ -2720,17 +2853,30 @@ struct obj *start;
             m.has_misc = MUSE_POT_SPEED;
         }
         nomore(MUSE_WAN_POLYMORPH_SELF);
-        if (obj->otyp == WAN_POLYMORPH && obj->spe > 0
+        if (obj->otyp == WAN_POLYMORPH
             && (mtmp->cham == NON_PM) && !mtmp->isshk
             && mons[monsndx(mdat)].difficulty < 6) {
-            m.misc = obj;
-            m.has_misc = MUSE_WAN_POLYMORPH_SELF;
+            if (obj->spe > 0) {
+                m.misc = obj;
+                m.has_misc = MUSE_WAN_POLYMORPH_SELF;
+            }
         }
         nomore(MUSE_POT_POLYMORPH);
         if (obj->otyp == POT_POLYMORPH && (mtmp->cham == NON_PM)
             && !mtmp->isshk && mons[monsndx(mdat)].difficulty < 6) {
             m.misc = obj;
             m.has_misc = MUSE_POT_POLYMORPH;
+        }
+        if (m.has_misc == MUSE_SCR_CHARGING && m.tocharge)
+            continue;
+        if (obj->otyp == SCR_CHARGING) {
+            if (m.tocharge) {
+                m.misc = obj;
+                m.has_misc = MUSE_SCR_CHARGING;
+            } else if (!charge_scroll) {
+                charge_scroll = obj;
+            }
+            continue;
         }
         nomore(MUSE_SCR_REMOVE_CURSE);
         if (obj->otyp == SCR_REMOVE_CURSE
@@ -2749,6 +2895,10 @@ struct obj *start;
             }
         }
     }
+    if (m.has_misc == 0 && m.tocharge && charge_scroll) {
+        m.misc = charge_scroll;
+        m.has_misc = MUSE_SCR_CHARGING;
+    }
     if (mtmp->mfrozen) {
         m.misc = (struct obj *) 0;
         m.has_misc = 0;
@@ -2756,6 +2906,7 @@ struct obj *start;
     }
     return(boolean) !!m.has_misc;
 #undef nomore
+#undef pick_to_charge
 }
 
 /* type of monster to polymorph into; defaults to one suitable for the
@@ -2789,6 +2940,26 @@ struct monst *mtmp;
     oseen = otmp && vismon;
 
     switch (m.has_misc) {
+    case MUSE_SCR_CHARGING:
+        if (!m.tocharge) {
+            impossible("Attempting to charge nothing?");
+            return 0;
+        }
+        mreadmsg(mtmp, otmp);
+        if (oseen)
+            makeknown(otmp->otyp);
+        if (mtmp->mconf) {
+            if (attacktype(mtmp->data, AT_MAGC))
+                mtmp->mspec_used = 0;
+            if (canseemon(mtmp))
+                pline("%s looks charged up!", Monnam(mtmp));
+        } else {
+            recharge(m.tocharge, (otmp->cursed) ? -1 :
+                     (otmp->blessed) ? 1 : 0, mtmp);
+        }
+        m_useup(mtmp, otmp);
+        m.tocharge = (struct obj *) 0; /* clear m.tocharge */
+        return 2;
     case MUSE_FIGURINE: {
         coord cc;
         int mndx = otmp->corpsenm;
@@ -3289,11 +3460,12 @@ struct obj *obj;
         if (obj->spe <= 0)
             return FALSE;
         if (typ == WAN_DIGGING)
-            return (boolean) !is_floater(mon->data);
+            return (boolean) (!(is_floater(mon->data) || can_levitate(mon)));
         if (objects[typ].oc_dir == RAY || typ == WAN_STRIKING
             || typ == WAN_TELEPORTATION || typ == WAN_CREATE_MONSTER
             || typ == WAN_CANCELLATION || typ == WAN_WISHING
-            || typ == WAN_POLYMORPH || typ == WAN_UNDEAD_TURNING)
+            || typ == WAN_POLYMORPH || typ == WAN_UNDEAD_TURNING
+            || typ == WAN_SLOW_MONSTER)
             return TRUE;
         break;
     case POTION_CLASS:
@@ -3343,6 +3515,8 @@ struct obj *obj;
             return TRUE;
         if (typ == FIGURINE)
             return TRUE;
+        if (typ == EXPENSIVE_CAMERA && obj->spe > 0)
+            return TRUE;
         break;
     case FOOD_CLASS:
         if (typ == CORPSE && !obj->zombie_corpse)
@@ -3381,6 +3555,8 @@ struct obj *obj;
             return (!mon_prop(mon, SLOW_DIGESTION));
         if (typ == RIN_REGENERATION)
             return (!mon_prop(mon, REGENERATION));
+        if (typ == RIN_LEVITATION)
+            return (grounded(mon->data));
         /* Below this line are off-limits to uniques */
         if (mon->data->geno & G_UNIQ)
             return (FALSE);
@@ -3423,6 +3599,13 @@ const char *str;
         if (str) {
             pline(str, s_suffix(mon_nam(mon)), "gloves");
             makeknown(ART_DRAGONBANE);
+        }
+        return TRUE;
+    } else if ((orefl = which_armor(mon, W_ARMG))
+               && orefl->otyp == ART_GAUNTLETS_OF_PURITY) {
+        if (str) {
+            pline(str, s_suffix(mon_nam(mon)), "gauntlets");
+            makeknown(ART_GAUNTLETS_OF_PURITY);
         }
         return TRUE;
     } else if (arti_reflects(MON_WEP(mon))) {
@@ -3555,14 +3738,11 @@ boolean by_you;
     mon->mstrategy &= ~STRAT_WAITFORU;
 
     if (is_spellcaster(mon) && !mon->mcan
-        && can_cast_spells(mon) && !mon->mconf
+        && !mon->mspec_used && !mon->mconf
         && mon->m_lev >= 5) {
+        struct obj *otmp, *onext, *pseudo;
 
-        if (mon->mspec_used)
-            return FALSE;
-
-        register struct obj *otemp, *onext;
-        register struct obj *pseudo = mksobj(SPE_STONE_TO_FLESH, FALSE, FALSE);
+        pseudo = mksobj(SPE_STONE_TO_FLESH, FALSE, FALSE);
         pseudo->blessed = pseudo->cursed = 0;
         mon->mspec_used = mon->mspec_used + rn2(7);
         if (canspotmon(mon))
@@ -3574,17 +3754,13 @@ boolean by_you;
             else
                 pline("%s seems limber!", Monnam(mon));
         }
-        pseudo->quan = 20L;
-        for (otemp = mon->minvent; otemp; otemp = onext) {
-            onext = otemp->nobj;
-            if (otemp->oclass == RING_CLASS) {
-                obj_extract_self(otemp);
-                mon->misc_worn_check &= ~otemp->owornmask;
-                update_mon_intrinsics(mon, otemp, FALSE, TRUE);
-                otemp->owornmask = 0L; /* obfree() expects this */
-                obfree(otemp, (struct obj *) 0);
-            }
-            (void) bhito(otemp, pseudo);
+
+        for (otmp = mon->minvent; otmp; otmp = onext) {
+            onext = otmp->nobj;
+            mon->misc_worn_check &= ~otmp->owornmask;
+            update_mon_intrinsics(mon, otmp, FALSE, TRUE);
+            otmp->owornmask = 0L; /* obfree() expects this */
+            (void) bhito(otmp, pseudo);
         }
         obfree(pseudo, (struct obj *) 0);
         mon->mlstmv = monstermoves; /* it takes a turn */
@@ -3850,7 +4026,8 @@ boolean by_you; /* true: if mon kills itself, hero gets credit/blame */
             if (vis)
                 pline("%s %s %s %s fire trap!", Mnam,
                       vtense(fakename[0], locomotion(mon->data, "move")),
-                      is_floater(mon->data) ? "over" : "onto",
+                      (is_floater(mon->data) || can_levitate(mon))
+                          ? "over" : "onto",
                       trap->tseen ? "the" : "a");
         }
         /* hack to avoid mintrap()'s chance of avoiding known trap */
@@ -4004,19 +4181,17 @@ void
 mmake_wish(mon)
 struct monst *mon;
 {
-    register int cnt;
-    register boolean wearable = FALSE;
-    register struct obj *otmp;
-
+    struct obj *otmp;
+    char *oname;
+    boolean wearable = FALSE;
     otmp = NULL;
 
     switch (rnd(18)) {
     case 1:
-        for (cnt = 0; cnt < 1 + rn2(3); cnt++) {
-            otmp = mksobj(POT_GAIN_LEVEL, FALSE, FALSE);
-            bless(otmp);
-            (void) mpickobj(mon, otmp);
-        }
+        otmp = mksobj(POT_GAIN_LEVEL, FALSE, FALSE);
+        bless(otmp);
+        otmp->quan = rnd(3);
+        otmp->owt = weight(otmp);
         break;
     case 2:
         switch (rnd(4)) {
@@ -4024,25 +4199,21 @@ struct monst *mon;
             otmp = mksobj(FIGURINE, FALSE, FALSE);
             otmp->corpsenm = PM_ARCHON;
             bless(otmp);
-            (void) mpickobj(mon, otmp);
             break;
         case 2:
             otmp = mksobj(FIGURINE, FALSE, FALSE);
             otmp->corpsenm = PM_BALROG;
             bless(otmp);
-            (void) mpickobj(mon, otmp);
             break;
         case 3:
             otmp = mksobj(FIGURINE, FALSE, FALSE);
             otmp->corpsenm = PM_VORPAL_JABBERWOCK;
             bless(otmp);
-            (void) mpickobj(mon, otmp);
             break;
         case 4:
             otmp = mksobj(FIGURINE, FALSE, FALSE);
             otmp->corpsenm = PM_WOODCHUCK;
             bless(otmp);
-            (void) mpickobj(mon, otmp);
             break;
         }
         break;
@@ -4050,7 +4221,6 @@ struct monst *mon;
         otmp = mksobj(AMULET_OF_LIFE_SAVING, FALSE, FALSE);
         bless(otmp);
         otmp->oerodeproof = 1;
-        (void) mpickobj(mon, otmp);
         wearable = TRUE;
         break;
     case 4:
@@ -4059,25 +4229,21 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
+        } else {
+            otmp = mksobj(WAN_DIGGING, TRUE, FALSE);
         }
         break;
     case 5:
-        if (!(resists_magm(mon) || defended(mon, AD_MAGM))) {
-            if (!cantweararm(mon))
-                otmp = mksobj(GRAY_DRAGON_SCALES, FALSE, FALSE);
-            else
-                otmp = mksobj(AMULET_OF_MAGIC_RESISTANCE, FALSE, FALSE);
+        if (!nohands(mon->data)) {
+            otmp = mksobj(GAUNTLETS_OF_DEXTERITY, FALSE, FALSE);
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(POT_FULL_HEALING, FALSE, FALSE);
             bless(otmp);
-            (void) mpickobj(mon, otmp);
         }
         break;
     case 6:
@@ -4089,22 +4255,17 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
-            otmp = mksobj(WAN_CREATE_MONSTER, FALSE, FALSE);
+            otmp = mksobj(WAN_CREATE_MONSTER, TRUE, FALSE);
         }
         break;
     case 7:
-        if (!mon_reflects(mon, (char *) 0)) {
-            if (!cantweararm(mon))
-                otmp = mksobj(SILVER_DRAGON_SCALES, FALSE, FALSE);
-            else
-                otmp = mksobj(AMULET_OF_REFLECTION, FALSE, FALSE);
+        if (!cantweararm(mon)) {
+            otmp = mksobj(CRYSTAL_PLATE_MAIL, FALSE, FALSE);
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(BAG_OF_HOLDING, FALSE, FALSE);
@@ -4117,12 +4278,10 @@ struct monst *mon;
             otmp = mksobj(AMULET_OF_FLYING, FALSE, FALSE);
             bless(otmp);
             otmp->oerodeproof = 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(POT_FULL_HEALING, FALSE, FALSE);
             bless(otmp);
-            (void) mpickobj(mon, otmp);
         }
         break;
     case 9:
@@ -4131,12 +4290,10 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(RIN_SLOW_DIGESTION, FALSE, FALSE);
             bless(otmp);
-            (void) mpickobj(mon, otmp);
         }
         break;
     case 10:
@@ -4148,12 +4305,10 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(POT_EXTRA_HEALING, FALSE, FALSE);
             bless(otmp);
-            (void) mpickobj(mon, otmp);
         }
         break;
     case 11:
@@ -4162,12 +4317,10 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(POT_GAIN_LEVEL, FALSE, FALSE);
             curse(otmp);
-            (void) mpickobj(mon, otmp);
         }
         break;
     case 12:
@@ -4176,12 +4329,10 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(POT_FULL_HEALING, FALSE, FALSE);
             bless(otmp);
-            (void) mpickobj(mon, otmp);
         }
         break;
     case 13:
@@ -4191,12 +4342,10 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(POT_EXTRA_HEALING, FALSE, FALSE);
             bless(otmp);
-            (void) mpickobj(mon, otmp);
         }
         break;
     case 14:
@@ -4205,12 +4354,12 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
-            otmp = mksobj(POT_GAIN_ENERGY, FALSE, FALSE);
+            otmp = mksobj(UNICORN_HORN, FALSE, FALSE);
             bless(otmp);
-            (void) mpickobj(mon, otmp);
+            otmp->oerodeproof = 1;
+            otmp->spe = rn2(3) + 1;
         }
         break;
     case 15:
@@ -4219,13 +4368,11 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
         } else {
             otmp = mksobj(RIN_PROTECTION, FALSE, FALSE);
             bless(otmp);
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
         }
         break;
     case 16: /* Monsters can wish for certain artifacts */
@@ -4234,34 +4381,31 @@ struct monst *mon;
             bless(otmp);
             otmp->oerodeproof = 1;
             otmp->spe = rn2(3) + 1;
-            (void) mpickobj(mon, otmp);
             wearable = TRUE;
-            break;
         }
         break;
     case 17:
         switch (rnd(3)) {
         case 1:
-            otmp = mksobj(WAN_CANCELLATION, FALSE, FALSE);
-            (void) mpickobj(mon, otmp);
+            otmp = mksobj(WAN_CANCELLATION, TRUE, FALSE);
             break;
         case 2:
-            otmp = mksobj(WAN_POLYMORPH, FALSE, FALSE);
-            (void) mpickobj(mon, otmp);
+            otmp = mksobj(WAN_POLYMORPH, TRUE, FALSE);
             break;
         case 3:
-            otmp = mksobj(WAN_DEATH, FALSE, FALSE);
-            (void) mpickobj(mon, otmp);
+            otmp = mksobj(WAN_DEATH, TRUE, FALSE);
             break;
         }
         break;
     case 18:
-        for (cnt = 0; cnt < 1 + rn2(3); cnt++) {
-            otmp = mksobj(EGG, FALSE, FALSE);
-            otmp->corpsenm = PM_COCKATRICE;
-            (void) mpickobj(mon, otmp);
-        }
+        otmp = mksobj(EGG, FALSE, FALSE);
+        otmp->corpsenm = PM_COCKATRICE;
+        otmp->quan = rnd(3);
+        otmp->owt = weight(otmp);
         break;
+    default:
+        otmp = mksobj(POT_GAIN_LEVEL, FALSE, FALSE);
+        curse(otmp);
     }
 
     if (otmp == NULL) {
@@ -4269,9 +4413,16 @@ struct monst *mon;
             pline("For a moment, %s had %s in its %s, but it disappears.",
                   mon_nam(mon), something, makeplural(mbodypart(mon, HAND)));
         return;
-    } else if (canseemon(mon)) {
-        pline("%s makes a wish for %s!", Monnam(mon), an(xname(otmp)));
     }
+
+    oname = ansimpleoname(otmp);
+    if (canseemon(mon))
+        pline("%s makes a wish for%s %s!",
+              Monnam(mon), (otmp->quan > 1) ? " some" : "", oname);
+
+    if (mpickobj(mon, otmp))
+        otmp = NULL;
+
     if (wearable)
         check_gear_next_turn(mon);
 }

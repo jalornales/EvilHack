@@ -94,26 +94,28 @@ dumpit()
                 DD.num_dunlevs, DD.dunlev_ureached);
         fprintf(stderr, "    depth_start %d, ledger_start %d\n",
                 DD.depth_start, DD.ledger_start);
-        fprintf(stderr, "    flags:%s%s%s%s%s%s\n",
+        fprintf(stderr, "    flags:%s%s%s%s%s%s%s\n",
                 DD.flags.rogue_like ? " rogue_like" : "",
                 DD.flags.maze_like ? " maze_like" : "",
                 DD.flags.hellish ? " hellish" : "",
                 DD.flags.iceq ? " iceq" : "",
                 DD.flags.vecnad ? " vecnad" : "",
-                DD.flags.gtown ? " gtown" : "");
+                DD.flags.gtown ? " gtown" : "",
+                DD.flags.purg ? " purg" : "");
         getchar();
     }
     fprintf(stderr, "\nSpecial levels:\n");
     for (x = sp_levchn; x; x = x->next) {
         fprintf(stderr, "%s (%d): ", x->proto, x->rndlevs);
         fprintf(stderr, "on %d, %d; ", x->dlevel.dnum, x->dlevel.dlevel);
-        fprintf(stderr, "flags:%s%s%s%s%s%s%s\n",
+        fprintf(stderr, "flags:%s%s%s%s%s%s%s%s\n",
                 x->flags.rogue_like ? " rogue_like" : "",
                 x->flags.maze_like ? " maze_like" : "",
                 x->flags.hellish ? " hellish" : "",
                 x->flags.iceq ? " iceq" : "",
                 x->flags.vecnad ? " vecnad" : "",
                 x->flags.gtown ? " gtown" : "",
+                x->flags.purg ? " purg" : "",
                 x->flags.town ? " town" : "");
         getchar();
     }
@@ -570,11 +572,12 @@ struct proto_dungeon *pd;
     new_level->flags.iceq = !!(tlevel->flags & ICEQ);
     new_level->flags.vecnad = !!(tlevel->flags & VECNAD);
     new_level->flags.gtown = !!(tlevel->flags & GTOWN);
+    new_level->flags.purg = !!(tlevel->flags & PURGATORY);
     /* bit shift needs to match that in include/dgn_file.h */
-    new_level->flags.align = ((tlevel->flags & D_ALIGN_MASK) >> 7);
+    new_level->flags.align = ((tlevel->flags & D_ALIGN_MASK) >> 8);
     if (!new_level->flags.align)
         new_level->flags.align =
-            ((pd->tmpdungeon[dgn].flags & D_ALIGN_MASK) >> 7);
+            ((pd->tmpdungeon[dgn].flags & D_ALIGN_MASK) >> 8);
 
     new_level->rndlevs = tlevel->rndlevs;
     new_level->next = (s_level *) 0;
@@ -715,6 +718,7 @@ struct level_map {
                   { "minend", &mineend_level },
                   { "minetn", &minetn_level },
                   { "soko1", &sokoend_level },
+                  { "soko4", &sokostart_level },
                   { X_START, &qstart_level },
                   { X_LOCATE, &qlocate_level },
                   { X_GOAL, &nemesis_level },
@@ -826,9 +830,10 @@ init_dungeons()
         dungeons[i].flags.iceq = !!(pd.tmpdungeon[i].flags & ICEQ);
         dungeons[i].flags.vecnad = !!(pd.tmpdungeon[i].flags & VECNAD);
         dungeons[i].flags.gtown = !!(pd.tmpdungeon[i].flags & GTOWN);
+        dungeons[i].flags.purg = !!(pd.tmpdungeon[i].flags & PURGATORY);
         /* bit shift needs to match that in include/dgn_file.h */
         dungeons[i].flags.align =
-            ((pd.tmpdungeon[i].flags & D_ALIGN_MASK) >> 7);
+            ((pd.tmpdungeon[i].flags & D_ALIGN_MASK) >> 8);
         /*
          * Set the entry level for this dungeon.  The pd.tmpdungeon entry
          * value means:
@@ -1328,7 +1333,8 @@ boolean
 Can_fall_thru(lev)
 d_level *lev;
 {
-    return (boolean) (Can_dig_down(lev) || Is_stronghold(lev));
+    return (boolean) (Can_dig_down(lev) || Is_stronghold(lev)
+                      || In_goblintown(lev));
 }
 
 /*
@@ -1458,6 +1464,14 @@ In_goblintown(lev)
 d_level *lev;
 {
     return (boolean) (dungeons[lev->dnum].flags.gtown);
+}
+
+/* are you in Purgatory? */
+boolean
+In_purgatory(lev)
+d_level *lev;
+{
+    return (boolean) (dungeons[lev->dnum].flags.purg);
 }
 
 /*
@@ -2373,7 +2387,7 @@ d_level *lev;
 #define INTEREST(feat)                                                   \
     ((feat).nfount || (feat).nsink || (feat).nthrone || (feat).naltar    \
      || (feat).ngrave || (feat).ntree || (feat).nshop || (feat).ntemple  \
-     || (feat).nforge)
+     || (feat).nforge || (feat).ndeadtree)
   /* || (feat).water || (feat).ice || (feat).lava */
 
 /* returns true if this level has something interesting to print out */
@@ -2565,6 +2579,11 @@ recalc_mapseen()
                 count = mptr->feat.ntree + 1;
                 if (count <= 3)
                     mptr->feat.ntree = count;
+                break;
+            case DEADTREE:
+                count = mptr->feat.ndeadtree + 1;
+                if (count <= 3)
+                    mptr->feat.ndeadtree = count;
                 break;
             case FOUNTAIN:
                 count = mptr->feat.nfount + 1;
@@ -3026,6 +3045,7 @@ boolean printdun;
         ADDNTOBUF("sink", mptr->feat.nsink);
         ADDNTOBUF("grave", mptr->feat.ngrave);
         ADDNTOBUF("tree", mptr->feat.ntree);
+        ADDNTOBUF("dead tree", mptr->feat.ndeadtree);
 #if 0
         ADDTOBUF("water", mptr->feat.water);
         ADDTOBUF("lava", mptr->feat.lava);

@@ -177,6 +177,7 @@ boolean check_if_better, stashing;
              || otmp->otyp == RIN_INCREASE_DAMAGE
              || otmp->otyp == RIN_INCREASE_ACCURACY
              || otmp->otyp == RIN_PROTECTION
+             || otmp->otyp == RIN_LEVITATION
              || otmp->otyp == FROST_HORN
              || otmp->otyp == FIRE_HORN
              || otmp->otyp == MAGIC_HARP
@@ -287,6 +288,7 @@ struct monst *mon;
     static struct obj dummy;
     struct obj *obj, *wep, *pickaxe, *unihorn, *key, *hwep, *proj, *rwep;
 
+    boolean intelligent = TRUE;
     dummy = zeroobj;
     dummy.otyp = GOLD_PIECE; /* not STRANGE_OBJECT or tools of interest */
     dummy.oartifact = 1; /* so real artifact won't override "don't keep it" */
@@ -297,7 +299,6 @@ struct monst *mon;
           proj = attacktype(mon->data, AT_WEAP)
             ? select_rwep(mon) : (struct obj *)0;
 
-    boolean intelligent = TRUE;
     rwep = attacktype(mon->data, AT_WEAP) ? propellor : (struct obj *) &zeroobj;
 
     if (is_animal(mon->data) || mindless(mon->data)) {
@@ -567,6 +568,9 @@ boolean devour;
         Strcpy(objnambuf, xname(obj));
         iflags.suppress_price--;
     }
+    /* some monsters that eat items could eat a container with contents */
+    if (Has_contents(obj))
+        meatbox(mtmp, obj);
     /* It's a reward if it's DOGFOOD and the player dropped/threw it.
        We know the player had it if invlet is set. -dlc */
     if (dogfood(mtmp, obj) == DOGFOOD && obj->invlet)
@@ -1760,7 +1764,8 @@ xchar nx, ny;
 {
     if ((!is_pool(nx, ny) || is_swimmer(mon->data))
         && (!is_lava(nx, ny) || likes_lava(mon->data))
-        && (!sobj_at(BOULDER, nx, ny) || racial_throws_rocks(mon)))
+        && (!sobj_at(BOULDER, nx, ny) || racial_throws_rocks(mon))
+        && (!(is_floater(mon->data) || can_levitate(mon))))
         return TRUE;
     return FALSE;
 }

@@ -209,9 +209,8 @@ int expltype;
                     break;
                 case AD_DISN:
                     explmask[i][j] = (olet == WAND_CLASS)
-                                         ? !!(nonliving(youmonst.data)
-                                              || is_demon(raceptr(&youmonst))
-                                              || is_angel(raceptr(&youmonst)))
+                                         ? !!(Death_resistance
+                                              || immune_death_magic(youmonst.data))
                                          : (how_resistant(DISINT_RES) > 50);
                     break;
                 case AD_ELEC:
@@ -448,11 +447,14 @@ int expltype;
                     pline("%s is caught in the %s!", Monnam(mtmp), str);
                 }
 
+                if (adtyp == AD_FIRE)
+                    (void) burnarmor(mtmp);
+
                 idamres += destroy_mitem(mtmp, SCROLL_CLASS, (int) adtyp);
                 idamres += destroy_mitem(mtmp, SPBOOK_CLASS, (int) adtyp);
                 idamnonres += destroy_mitem(mtmp, POTION_CLASS, (int) adtyp);
-                idamnonres += destroy_mitem(mtmp, WAND_CLASS, (int) adtyp);
                 idamnonres += destroy_mitem(mtmp, RING_CLASS, (int) adtyp);
+                idamnonres += destroy_mitem(mtmp, WAND_CLASS, (int) adtyp);
 
                 if (explmask[i][j] == 1) {
                     golemeffects(mtmp, (int) adtyp, dam + idamres);

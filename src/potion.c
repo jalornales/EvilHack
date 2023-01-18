@@ -417,9 +417,6 @@ boolean talk;
 void
 toggle_blindness()
 {
-    boolean Stinging = (uwep && (EWarn_of_mon & W_WEP) != 0L);
-    boolean Stinging_offhand = (u.twoweap && uswapwep && (EWarn_of_mon & W_SWAPWEP) != 0L);
-
     /* blindness has just been toggled */
     context.botl = TRUE; /* status conditions need update */
     vision_full_recalc = 1; /* vision has changed */
@@ -429,7 +426,7 @@ toggle_blindness()
        and then a secret door; hero was blinded by vapors but then got the
        message "a door appears in the wall" because wall spot was IN_SIGHT) */
     vision_recalc(0);
-    if (Blind_telepat || Infravision || Stinging || Stinging_offhand)
+    if (Blind_telepat || Infravision || context.warntype.obj)
         see_monsters(); /* also counts EWarn_of_mon monsters */
     /*
      * Avoid either of the sequences
@@ -439,10 +436,7 @@ toggle_blindness()
      * "Sting is glowing" when regaining sight so that the eventual
      * "stops" message matches the most recent "Sting is ..." one.
      */
-    if (Stinging)
-        Sting_effects(-1);
-    if (Stinging_offhand)
-        Sting_effects_offhand(-1);
+    blind_glow_warnings();
     /* update dknown flag for inventory picked up while blind */
     if (!Blind)
         learn_unseen_invent();
@@ -1118,16 +1112,26 @@ register struct obj *otmp;
         if (otmp->cursed) {
             unkn++;
 
+            /* Once the Amulet of Yendor has been obtained
+               (or the Idol of Moloch imbued for Infidels),
+               leaving the sanctum without going through
+               Purgatory is prohibited */
+            if (Is_sanctum(&u.uz) && u.uachieve.amulet) {
+                You("have an uneasy feeling.");
+                goto no_rise;
+            }
+
             /* Being in the presence of demon lords/princes
                can negate cursed potions of gain level most
                of the time */
             for (mtmp = fmon; mtmp; mtmp = mtmp->nmon) {
+                /* order is important here, should a demon
+                   prince summon a demon lord */
                 if (is_dlord(mtmp->data) && rn2(5)) {
                     pline("Demonic forces prevent you from rising up.");
                     goto no_rise;
-                }
-                if (is_dprince(mtmp->data) && rn2(20)) {
-                    pline("Demonic forces prevent you from rising up.");
+                } else if (is_dprince(mtmp->data) && rn2(20)) {
+                    pline("Powerful demonic forces prevent you from rising up.");
                     goto no_rise;
                 }
             }
@@ -1913,7 +1917,7 @@ int how;
     }
 
     /* Note: potionbreathe() does its own docall() */
-    if ((distance == 0 || (distance < 3 && rn2(5)))
+    if ((distance == 0 || (distance < 3 && !rn2((1 + ACURR(A_DEX)) / 2)))
         && (!breathless(youmonst.data) || haseyes(youmonst.data)))
         potionbreathe(obj);
     else if (obj->dknown && !objects[obj->otyp].oc_name_known
@@ -2729,9 +2733,14 @@ struct obj *obj;
         mongrantswish(&mtmp);
         break;
     case 1:
-        verbalize("Thank you for freeing me!");
-        (void) tamedog(mtmp, (struct obj *) 0);
-        break;
+        /* if the player is trying to play petless, make it safe
+           for them to rub lamps */
+        if (u.uconduct.pets) {
+            verbalize("Thank you for freeing me!");
+            (void) tamedog(mtmp, (struct obj *) 0);
+            break;
+        }
+        /* FALLTHRU */
     case 2:
         verbalize("You freed me!");
         mtmp->mpeaceful = TRUE;

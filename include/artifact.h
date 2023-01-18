@@ -40,7 +40,7 @@
 #define SPFX_XRAY 0x02000000L    /* gives X-RAY vision to player */
 #define SPFX_REFLECT 0x04000000L /* Reflection */
 #define SPFX_PROTECT 0x08000000L /* Protection */
-#define SPFX_EXCLUDE 0x10000000L /* exclude from total artifact count */
+#define SPFX_NOWISH 0x10000000L  /* cannot be wished for */
 
 struct artifact {
     short otyp;
@@ -55,6 +55,7 @@ struct artifact {
     short race;         /* character race associated with */
     long cost; /* price when sold to hero (default 100 x base cost) */
     char acolor;        /* color to use if artifact 'glows' */
+    short material;     /* material it's made of (0 = base type's default) */
 };
 
 /* invoked properties with special powers */
@@ -68,6 +69,7 @@ enum invoke_prop_types {
     CREATE_PORTAL,
     ENLIGHTENING,
     CREATE_AMMO,
+    FEAR,
     PHASING,
     CHANNEL,
     DEATH_MAGIC

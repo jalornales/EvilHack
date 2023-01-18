@@ -741,7 +741,7 @@ docast()
     int spell_no;
 
     if (getspell(&spell_no))
-        return spelleffects(spell_no, FALSE);
+        return spelleffects(spell_no, FALSE, FALSE);
     return 0;
 }
 
@@ -930,9 +930,15 @@ int spell;
 }
 
 int
-spelleffects(spell, atme)
+spelleffects(spell, atme, wiz_cast)
 int spell;
 boolean atme;
+/* Set TRUE when cast from the wizard mode #wiz_spell command.
+ * Such a cast takes no energy, is cast at the highest skill, and always succeeds.
+ * In that case "spell" is the spell ID rather than the spellbook index
+ * -- the equivalent of spellid(spell).
+ */
+boolean wiz_cast;
 {
     int energy, damage, chance, n, intell;
     int otyp, skill, role_skill, res = 0;
@@ -951,7 +957,7 @@ boolean atme;
      * (There's no duplication of messages; when the rejection takes
      * place in getspell(), we don't get called.)
      */
-    if ((spell < 0) || rejectcasting()) {
+    if ((spell < 0) || (!wiz_cast && rejectcasting())) {
         return 0; /* no time elapses */
     }
 
@@ -959,13 +965,14 @@ boolean atme;
      *  Note: dotele() also calculates energy use and checks nutrition
      *  and strength requirements; it any of these change, update it too.
      */
-    energy = (spellev(spell) * 5); /* 5 <= energy <= 35 */
+    energy = wiz_cast ? 0 : (spellev(spell) * 5); /* 5 <= energy <= 35 */
 
     /*
      * Spell casting no longer affects knowledge of the spell. A
      * decrement of spell knowledge is done every turn.
      */
-    if (spellknow(spell) <= 0) {
+    if (wiz_cast) {
+    } else if (spellknow(spell) <= 0) {
         if (spellid(spell) == SPE_PSIONIC_WAVE)
             You("have somehow lost your psychic ability!");
         else
@@ -991,7 +998,8 @@ boolean atme;
         Your("recall of this spell is gradually fading.");
     }
 
-    if (u.uhunger <= 10 && spellid(spell) != SPE_DETECT_FOOD) {
+    if (wiz_cast) {
+    } else if (u.uhunger <= 10 && spellid(spell) != SPE_DETECT_FOOD) {
         You("are too hungry to cast that spell.");
         return 0;
     } else if (ACURR(A_STR) < 4 && spellid(spell) != SPE_RESTORE_ABILITY) {
@@ -1045,7 +1053,7 @@ boolean atme;
         else
             You("don't have enough energy to cast that spell.");
         return res;
-    } else {
+    } else if (!wiz_cast) {
         if (spellid(spell) != SPE_DETECT_FOOD) {
             int hungr = energy * 2;
 
@@ -1096,18 +1104,20 @@ boolean atme;
         }
     }
 
-    chance = percent_success(spell);
-    if (confused || (rnd(100) > chance)) {
+    chance = wiz_cast ? 100 : percent_success(spell);
+    if ((!wiz_cast && confused) || (rnd(100) > chance)) {
         if (spellid(spell) == SPE_PSIONIC_WAVE)
             You("are too confused to use your psychic abilities.");
         else
             You("fail to cast the spell correctly.");
         if (u.ualign.type == A_NONE && !u.uhave.amulet
             && !u.uachieve.amulet
-            && spellid(spell) != SPE_PSIONIC_WAVE)
-            losehp(energy / 2, "draining their own life force", KILLED_BY);
-        else
+            && spellid(spell) != SPE_PSIONIC_WAVE) {
+            Sprintf(killer.name, "draining %s own life force", uhis());
+            losehp(energy / 2, killer.name, KILLED_BY);
+        } else {
             u.uen -= energy / 2;
+        }
         context.botl = 1;
         return 1;
     }
@@ -1116,7 +1126,7 @@ boolean atme;
        the Amulet of Yendor in their possession (before
        the Idol of Moloch is imbued) costs them hit points
        instead of spell power */
-    if (u.ualign.type == A_NONE && !u.uhave.amulet
+    if (!wiz_cast && u.ualign.type == A_NONE && !u.uhave.amulet
         && !u.uachieve.amulet
         /* psychic attack uses spell power but
            technically is not considered a spell */
@@ -1130,12 +1140,13 @@ boolean atme;
            result is that our Infidel will still lose about
            the same amount of hit points as if casting
            something other than healing/extra healing */
+        Sprintf(killer.name, "draining %s own life force", uhis());
         if (spellid(spell) == SPE_HEALING) {
-            losehp(6 * energy, "draining their own life force", KILLED_BY);
+            losehp(6 * energy, killer.name, KILLED_BY);
         } else if (spellid(spell) == SPE_EXTRA_HEALING) {
-            losehp(4 * energy, "draining their own life force", KILLED_BY);
+            losehp(4 * energy, killer.name, KILLED_BY);
         } else {
-            losehp(energy, "draining their own life force", KILLED_BY);
+            losehp(energy, killer.name, KILLED_BY);
         }
     } else {
         u.uen -= energy;
@@ -1158,7 +1169,7 @@ boolean atme;
     context.botl = 1;
     exercise(A_WIS, TRUE);
     /* pseudo is a temporary "false" object containing the spell stats */
-    pseudo = mksobj(spellid(spell), FALSE, FALSE);
+    pseudo = mksobj(wiz_cast ? spell : spellid(spell), FALSE, FALSE);
     pseudo->blessed = pseudo->cursed = 0;
     pseudo->quan = 20L; /* do not let useup get it */
     /*
@@ -1167,7 +1178,7 @@ boolean atme;
      */
     otyp = pseudo->otyp;
     skill = spell_skilltype(otyp);
-    role_skill = P_SKILL(skill);
+    role_skill = wiz_cast ? P_EXPERT : P_SKILL(skill);
 
     switch (otyp) {
     /*
@@ -1412,7 +1423,8 @@ boolean atme;
     }
 
     /* gain skill for successful cast */
-    use_skill(skill, spellev(spell));
+    if (!wiz_cast)
+        use_skill(skill, spellev(spell));
 
     obfree(pseudo, (struct obj *) 0); /* now, get rid of it */
     return 1;
@@ -1972,9 +1984,11 @@ int spell;
     if (uarms)
         splcaster += urole.spelshld;
 
-    if (uarmh && is_metallic(uarmh) && uarmh->otyp != HELM_OF_BRILLIANCE && !paladin_bonus)
+    if (uarmh && is_metallic(uarmh)
+        && uarmh->otyp != HELM_OF_BRILLIANCE && !paladin_bonus)
         splcaster += uarmhbon;
-    if (uarmg && is_metallic(uarmg) && !paladin_bonus)
+    if (uarmg && is_metallic(uarmg)
+        && uarmg->oartifact != ART_GAUNTLETS_OF_PURITY && !paladin_bonus)
         splcaster += uarmgbon;
     if (uarmf && is_metallic(uarmf) && !paladin_bonus)
         splcaster += uarmfbon;
@@ -2002,7 +2016,8 @@ int spell;
         splcaster += urole.spelsbon;
 
     /* `healing spell' bonus */
-    if (spellid(spell) == SPE_HEALING || spellid(spell) == SPE_EXTRA_HEALING
+    if (spellid(spell) == SPE_HEALING
+        || spellid(spell) == SPE_EXTRA_HEALING
         || spellid(spell) == SPE_CURE_BLINDNESS
         || spellid(spell) == SPE_CURE_SICKNESS
         || spellid(spell) == SPE_RESTORE_ABILITY
@@ -2078,25 +2093,34 @@ int spell;
     /* For those classes that don't cast well, wielding one of these
      * special staves should be a significant help.
      */
-    if (uwep && uwep->otyp >= STAFF_OF_DIVINATION && uwep->otyp <= STAFF_OF_WAR) {
+    if (uwep && uwep->otyp >= STAFF_OF_DIVINATION && uwep->otyp <= ASHWOOD_STAFF) {
 #define STAFFBONUS 50
         if (spell_skilltype(spellid(spell)) == P_CLERIC_SPELL
-            && uwep->otyp == STAFF_OF_HOLINESS)
+            && (uwep->otyp == STAFF_OF_HOLINESS
+                || uwep->otyp == ASHWOOD_STAFF))
             chance += STAFFBONUS;
         if (spell_skilltype(spellid(spell)) == P_HEALING_SPELL
-            && uwep->otyp == STAFF_OF_HEALING)
+            && (uwep->otyp == STAFF_OF_HEALING
+                || uwep->otyp == ASHWOOD_STAFF))
             chance += STAFFBONUS;
         if (spell_skilltype(spellid(spell)) == P_DIVINATION_SPELL
-            && uwep->otyp == STAFF_OF_DIVINATION)
+            && (uwep->otyp == STAFF_OF_DIVINATION
+                || uwep->otyp == ASHWOOD_STAFF))
             chance += STAFFBONUS;
         if (spell_skilltype(spellid(spell)) == P_MATTER_SPELL
-            && uwep->otyp == STAFF_OF_MATTER)
+            && (uwep->otyp == STAFF_OF_MATTER
+                || uwep->otyp == ASHWOOD_STAFF))
             chance += STAFFBONUS;
         if (spell_skilltype(spellid(spell)) == P_ESCAPE_SPELL
-            && uwep->otyp == STAFF_OF_ESCAPE)
+            && (uwep->otyp == STAFF_OF_ESCAPE
+                || uwep->otyp == ASHWOOD_STAFF))
             chance += STAFFBONUS;
         if (spell_skilltype(spellid(spell)) == P_ATTACK_SPELL
-            && uwep->otyp == STAFF_OF_WAR)
+            && (uwep->otyp == STAFF_OF_WAR
+                || uwep->otyp == ASHWOOD_STAFF))
+            chance += STAFFBONUS;
+        if (spell_skilltype(spellid(spell)) == P_ENCHANTMENT_SPELL
+            && uwep->otyp == ASHWOOD_STAFF)
             chance += STAFFBONUS;
 #undef STAFFBONUS
     }

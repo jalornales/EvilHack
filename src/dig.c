@@ -257,7 +257,7 @@ dig(VOID_ARGS)
         if (!dig_check(BY_YOU, TRUE, u.ux, u.uy))
             return 0;
     } else { /* !context.digging.down */
-        if (IS_TREE(lev->typ) && !may_dig(dpx, dpy)
+        if (IS_TREES(lev->typ) && !may_dig(dpx, dpy)
             && dig_typ(uwep, dpx, dpy) == DIGTYP_TREE) {
             pline("This tree seems to be petrified.");
             return 0;
@@ -404,11 +404,15 @@ dig(VOID_ARGS)
                     goto cleanup;
                 }
             }
-            if (IS_TREES(lev->typ)) {
+            if (IS_TREE(lev->typ)) {
                 digtxt = "You cut down the tree.";
                 lev->typ = ROOM, lev->flags = 0;
-                if (!rn2(5) && !IS_DEADTREE(lev->typ))
+                if (!rn2(5))
                     (void) rnd_treefruit_at(dpx, dpy);
+            } else if (IS_DEADTREE(lev->typ)) {
+                /* no fruit for you */
+                digtxt = "You cut down the tree.";
+                lev->typ = ROOM, lev->flags = 0;
             } else {
                 digtxt = "You succeed in cutting away some rock.";
                 lev->typ = CORR, lev->flags = 0;
@@ -644,7 +648,8 @@ int ttyp;
             if (oldobjs != newobjs) /* something unearthed */
                 (void) pickup(1);   /* detects pit */
         } else if (mtmp) {
-            if (is_flyer(mtmp->data) || is_floater(mtmp->data)) {
+            if (is_flyer(mtmp->data)
+                || is_floater(mtmp->data) || can_levitate(mtmp)) {
                 if (canseemon(mtmp))
                     pline("%s %s over the pit.", Monnam(mtmp),
                           (is_flyer(mtmp->data)) ? "flies" : "floats");
@@ -713,6 +718,7 @@ int ttyp;
             if (mtmp) {
                 /*[don't we need special sokoban handling here?]*/
                 if (is_flyer(mtmp->data) || is_floater(mtmp->data)
+                    || can_levitate(mtmp)
                     || mtmp->data == &mons[PM_WUMPUS]
                     || (mtmp->wormno && count_wsegs(mtmp) > 5)
                     || mtmp->data->msize >= MZ_HUGE)
@@ -980,8 +986,10 @@ struct obj *obj;
     ispick = is_pick(obj);
     verb = ispick ? "dig" : "chop";
 
-    if (!u_handsy())
+    if (Hidinshell) {
+        You_cant("%s while hiding in your shell.", verb);
         return res;
+    }
 
     if (u.utrap && u.utraptype == TT_WEB) {
         pline("%s you can't %s while entangled in a web.",
@@ -1043,8 +1051,6 @@ struct obj *obj;
 
     if (u.uswallow && attack(u.ustuck)) {
         ; /* return 1 */
-    } else if (!u_handsy()) {
-        return 0;
     } else if (Underwater) {
         pline("Turbulence torpedoes your %s attempts.", verbing);
     } else if (u.dz < 0) {
@@ -1333,10 +1339,12 @@ register struct monst *mtmp;
         } else {
             here->typ = DOOR, here->doormask = D_NODOOR;
         }
-    } else if (IS_TREES(here->typ)) {
+    } else if (IS_TREE(here->typ)) {
         here->typ = ROOM, here->flags = 0;
-        if (pile && pile < 5 && !IS_DEADTREE(here->typ))
+        if (pile && pile < 5)
             (void) rnd_treefruit_at(mtmp->mx, mtmp->my);
+    } else if (IS_DEADTREE(here->typ)) {
+        here->typ = ROOM, here->flags = 0;
     } else {
         here->typ = CORR, here->flags = 0;
         if (pile && pile < 5)
@@ -1916,7 +1924,7 @@ boolean *dealloced;
 #endif
     }
     add_to_buried(otmp);
-    return  otmp2;
+    return otmp2;
 }
 
 void
@@ -2078,7 +2086,8 @@ struct monst *mtmp;
 {
     debugpline1("bury_monst: %s", mon_nam(mtmp));
     if (canseemon(mtmp)) {
-        if (is_flyer(mtmp->data) || is_floater(mtmp->data)) {
+        if (is_flyer(mtmp->data) || is_floater(mtmp->data)
+            || can_levitate(mtmp)) {
             pline_The("%s opens up, but %s is not swallowed!",
                       surface(mtmp->mx, mtmp->my), mon_nam(mtmp));
             return;
@@ -2235,6 +2244,7 @@ struct monst *mdef, *magr;
     /* First, do terrain modifications. mdef doesn't react until after this. */
     if (trap && (trap->ttyp == PIT || trap->ttyp == SPIKED_PIT
                  || trap->ttyp == HOLE)) {
+        boolean make_hole = !rn2(40);
         /* The existing chasm grows larger. A pit creator that is low on health
          * is more likely to dig all the way through and turn it into a hole. */
         if (canseexy) {
@@ -2242,7 +2252,6 @@ struct monst *mdef, *magr;
                   trap->ttyp == HOLE ? "chasm" : "pit",
                   youdefend ? "you" : mon_nam(mdef));
         }
-        boolean make_hole = !rn2(40);
         if ((youattack && u.mh * 5 <= u.mhmax)
             || (!youattack && mdef->mhp * 5 <= mdef->mhpmax)) {
             make_hole = !rn2(10);
@@ -2290,10 +2299,10 @@ struct monst *mdef, *magr;
     /* Now that terrain has been modified, take care of mdef.
      * We have guaranteed that (x,y) now contains either a pit, spiked pit, or
      * hole. */
-    const char *to_the_bottom = is_pit(trap->ttyp) ? " to the bottom" : "";
     if (youdefend) {
         reset_utrap(FALSE);
-        pline("%s hurls you down%s!", Monnam(magr), to_the_bottom);
+        pline("%s hurls you down%s!", Monnam(magr),
+              is_pit(trap->ttyp) ? " to the bottom" : "");
         /* Use FORCETRAP to avoid messages about not falling into the pit if
          * flying or levitating; however, like the !youdefend case below, either
          * will cause you to skip the pit's actual effects (but you will take
@@ -2312,14 +2321,16 @@ struct monst *mdef, *magr;
         mdef->mtrapped = 0;
         if (canseemon(mdef))
             pline("%s hurl%s %s down%s!", youattack ? "You" : Monnam(magr),
-                  youattack ? "" : "s", mon_nam(mdef), to_the_bottom);
+                  youattack ? "" : "s", mon_nam(mdef),
+                  is_pit(trap->ttyp) ? " to the bottom" : "");
         /* This does not set force_mintrap - which for some reason causes
          * flying monsters not to fall into a pit if true. Thus, they will not
          * get extra damage for the trap, but will still take the normal damage
          * from being hurled in. */
         if (mintrap(mdef) == 3) { /* 3 == went off level */
             sent_down_hole = TRUE;
-        } else if (is_flyer(mdef->data) || is_floater(mdef->data)) {
+        } else if (is_flyer(mdef->data) || is_floater(mdef->data)
+                   || can_levitate(mdef)) {
             if (canseemon(mdef))
                 pline("%s %s back up.", Monnam(mdef),
                       is_flyer(mdef->data) ? "flies" : "floats");

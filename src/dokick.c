@@ -199,6 +199,7 @@ xchar x, y;
      */
     if (Upolyd && attacktype(youmonst.data, AT_KICK)) {
         struct attack *uattk;
+        struct obj *hated_obj;
         int sum, kickdieroll, armorpenalty, specialdmg,
             attknum = 0,
             tmp = find_roll_to_hit(mon, AT_KICK, (struct obj *) 0, &attknum,
@@ -216,7 +217,6 @@ xchar x, y;
                 continue;
 
             kickdieroll = rnd(20);
-            struct obj* hated_obj;
             specialdmg = special_dmgval(&youmonst, mon, W_ARMF, &hated_obj);
             if (noncorporeal(mon->data) && !specialdmg) {
                 /* doesn't matter whether it would have hit or missed,
@@ -294,7 +294,7 @@ xchar x, y;
                 pline("%s %s, %s evading your %skick.", Monnam(mon),
                       (!level.flags.noteleport && can_teleport(mon->data))
                           ? "teleports"
-                          : is_floater(mon->data)
+                          : (is_floater(mon->data) || can_levitate(mon))
                                 ? "floats"
                                 : is_flyer(mon->data) ? "swoops"
                                                       : (nolimbs(mon->data)

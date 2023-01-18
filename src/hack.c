@@ -584,7 +584,7 @@ register xchar ox, oy;
     /* optimize by leaving on the fobj chain? */
     remove_object(obj);
     maybe_unhide_at(obj->ox, obj->oy);
-    newsym(obj->ox, obj->oy);
+    newsym_force(obj->ox, obj->oy);
     place_object(obj, ox, oy);
     newsym(ox, oy);
 }
@@ -1879,13 +1879,17 @@ domove_core()
                              : "nothing");
         } else if (solid) {
             /* glyph might indicate unseen terrain if hero is blind;
-               unlike searching, this won't reveal what that terrain is
-               (except for solid rock, where the glyph would otherwise
-               yield ludicrous "dark part of a room") */
-            Strcpy(buf, (levl[x][y].typ == STONE) ? "solid rock"
-                         : glyph_is_cmap(glyph)
-                            ? the(defsyms[glyph_to_cmap(glyph)].explanation)
-                            : (const char *) "an unknown obstacle");
+               unlike searching, this won't reveal what that terrain is;
+               3.7: used to say "solid rock" for STONE, but that made it be
+               different from unmapped walls outside of rooms (and was wrong
+               on arboreal levels) */
+            if (levl[x][y].seenv || IS_STWALL(levl[x][y].typ)
+                || levl[x][y].typ == SDOOR || levl[x][y].typ == SCORR) {
+                glyph = back_to_glyph(x, y);
+                Strcpy(buf, the(defsyms[glyph_to_cmap(glyph)].explanation));
+            } else {
+                Strcpy(buf, "an unknown obstacle");
+            }
             /* note: 'solid' is misleadingly named and catches pools
                of water and lava as well as rock and walls */
         } else {
@@ -1954,21 +1958,26 @@ domove_core()
     /* Paranoid checks for dangerous moves, unless specified with 'm' */
     if (!context.nopick || context.run) {
         boolean known_wwalking, known_lwalking;
-        known_wwalking = (uarmf && uarmf->otyp == WATER_WALKING_BOOTS
-                          && objects[WATER_WALKING_BOOTS].oc_name_known
+        known_wwalking = (((uarmf && uarmf->otyp == WATER_WALKING_BOOTS
+                            && objects[WATER_WALKING_BOOTS].oc_name_known)
+                           || (uarm && Is_dragon_scaled_armor(uarm)
+                               && Dragon_armor_to_scales(uarm) == WHITE_DRAGON_SCALES))
                           && !u.usteed);
         /* FIXME: This can be exploited to identify the ring of fire resistance
          * if the player is wearing it unidentified and has identified
          * fireproof boots of water walking and is walking over lava. However,
          * this is such a marginal case that it may not be worth fixing. */
-        known_lwalking = (known_wwalking && Fire_resistance
-                          && uarmf->oerodeproof && uarmf->rknown);
+        known_lwalking = ((uarmf && known_wwalking && Fire_resistance
+                           && uarmf->oerodeproof && uarmf->rknown)
+                          || (uarm && Is_dragon_scaled_armor(uarm)
+                               && Dragon_armor_to_scales(uarm) == WHITE_DRAGON_SCALES));
         if (!Levitation && !Flying && grounded(youmonst.data)
             && !Stunned && !Confusion && levl[x][y].seenv
             && ((is_pool(x, y) && !is_pool(u.ux, u.uy))
                 || (is_lava(x, y) && !is_lava(u.ux, u.uy)))) {
             if (is_pool(x, y) && !known_wwalking) {
-                if (ParanoidSwim && yn("Really enter the water?") != 'y') {
+                if (ParanoidSwim
+                    && !paranoid_query(ParanoidSwim, "Really enter the water?")) {
                     context.move = 0;
                     nomul(0);
                     You("narrowly avoid %s into the %s.",
@@ -1981,7 +1990,8 @@ domove_core()
                     return;
                 }
             } else if (is_lava(x, y) && !known_lwalking) {
-                if (ParanoidSwim && yn("Really enter the lava?") != 'y') {
+                if (ParanoidSwim
+                    && !paranoid_query(ParanoidSwim, "Really enter the lava?")) {
                     context.move = 0;
                     nomul(0);
                     You("narrowly avoid %s into the lava.",
@@ -2323,7 +2333,7 @@ switch_terrain()
     }
     /* the same terrain that blocks levitation also blocks flight */
     if (blocklev) {
-        if (Flying)
+        if (Flying && !Passes_walls)
             You_cant("fly in here.");
         BFlying |= FROMOUTSIDE;
     } else if (BFlying) {
@@ -2376,6 +2386,8 @@ boolean newspot;             /* true if called by spoteffects */
 
             u.uinwater = 0;       /* leave the water */
             if (was_underwater) { /* restore vision */
+                if (See_underwater)
+                    vision_reset();
                 docrt();
                 vision_full_recalc = 1;
             }
@@ -2390,7 +2402,7 @@ boolean newspot;             /* true if called by spoteffects */
             || (shallow_water && verysmall(youmonst.data))) {
             if (u.usteed
                 && (is_flyer(u.usteed->data) || is_floater(u.usteed->data)
-                    || is_clinger(u.usteed->data))) {
+                    || is_clinger(u.usteed->data) || can_levitate(u.usteed))) {
                 /* floating or clinging steed keeps hero safe (is_flyer() test
                    is redundant; it can't be true since Flying yielded false) */
                 return FALSE;
@@ -2572,7 +2584,7 @@ boolean pick;
                                     : (time_left < 10L) ? 1
                                       : 0]);
     }
-    if ((mtmp = m_at(u.ux, u.uy)) && !u.uswallow) {
+    if ((mtmp = m_at(u.ux, u.uy)) != 0 && !u.uswallow) {
         mtmp->mundetected = mtmp->msleeping = 0;
         switch (mtmp->data->mlet) {
         case S_PIERCER: {
@@ -3015,7 +3027,7 @@ pickup_checks()
             You_cant("reach the bottom to pick things up.");
             return 0;
         } else if (!likes_lava(youmonst.data)) {
-            You("would burn to a crisp trying to pick things up.");
+            You("would %s trying to pick things up.", on_fire(&youmonst, ON_FIRE_DEAD));
             return 0;
         }
     }
@@ -3134,7 +3146,8 @@ lookaround()
                 continue;
 
             if (IS_ROCK(levl[x][y].typ) || levl[x][y].typ == ROOM
-                || (IS_AIR(levl[x][y].typ) && !In_V_tower(&u.uz))) {
+                || (IS_AIR(levl[x][y].typ) && !In_V_tower(&u.uz)
+                    && !In_purgatory(&u.uz) && !In_icequeen_branch(&u.uz))) {
                 continue;
             } else if (closed_door(x, y) || (mtmp && is_door_mappear(mtmp))) {
                 if (x != u.ux && y != u.uy)
@@ -3637,6 +3650,30 @@ spot_checks(xchar x, xchar y, schar old_typ)
         }
         break;
     }
+}
+
+/* disintegration routine for monsters' inventory
+   if monster is disintegrated. disintegrate_mon()
+   handles black dragon breath attack */
+void
+disint_mon_invent(mon)
+struct monst *mon;
+{
+    struct obj *otmp, *otmp2, *m_amulet = mlifesaver(mon);
+
+/* note: worn amulet of life saving must be preserved in order to operate */
+#define oresist_disintegration(obj) \
+    (objects[obj->otyp].oc_oprop == DISINT_RES \
+     || obj_resists(obj, 5, 50) || is_quest_artifact(obj) || obj == m_amulet)
+
+    for (otmp = mon->minvent; otmp; otmp = otmp2) {
+        otmp2 = otmp->nobj;
+        if (!oresist_disintegration(otmp)) {
+            extract_from_minvent(mon, otmp, TRUE, TRUE);
+            obfree(otmp, (struct obj *) 0);
+        }
+    }
+#undef oresist_disintegration
 }
 
 /*hack.c*/

@@ -129,6 +129,7 @@ struct monst *mtmp;
         (void) memset((genericptr_t) ERID(mtmp), 0, sizeof(struct erid));
     }
 }
+
 void
 free_erid(mtmp)
 struct monst *mtmp;
@@ -146,21 +147,34 @@ struct monst *rider;
 {
     struct monst *steed;
     coord cc;
+
     if (!has_erid(rider))
         return;
+
     steed = ERID(rider)->m1;
     free_erid(rider);
-    /* TODO: Figure out what's going on here */
-    if (!DEADMONSTER(rider)) {
-        enexto(&cc, rider->mx, rider->my, rider->data);
-        rloc_to(rider, cc.x, cc.y);
+
+    /* handle rider if both rider and steed are alive */
+    if (!DEADMONSTER(rider) && !DEADMONSTER(steed)) {
+        /* move rider to an adjacent tile */
+        if (enexto(&cc, rider->mx, rider->my, rider->data))
+            rloc_to(steed, cc.x, cc.y);
+        else /* evidently no room nearby; move rider elsewhere */
+            (void) rloc(rider, FALSE);
     }
-    if (!DEADMONSTER(steed)) {
-        enexto(&cc, steed->mx, steed->my, steed->data);
-        rloc_to(steed, cc.x, cc.y);
+    /* place rider if steed dies and rider is still alive */
+    if (!DEADMONSTER(rider) && DEADMONSTER(steed)) {
+        remove_monster(steed->mx, steed->my);
+        place_monster(rider, rider->mx, rider->my);
     }
+    /* place steed if rider dies and steed is still alive */
+    if (!DEADMONSTER(steed) && DEADMONSTER(rider))
+        place_monster(steed, steed->mx, steed->my);
+
     update_monster_region(rider);
     update_monster_region(steed);
+    newsym(rider->mx, rider->my);
+    newsym(steed->mx, steed->my);
 }
 
 struct monst*
@@ -654,7 +668,8 @@ boolean force;      /* Quietly force this animal */
     }
 
     /* Is the player impaired? */
-    if (!force && !is_floater(ptr) && !is_flyer(ptr) && Levitation
+    if (!force && !is_floater(ptr) && !is_flyer(ptr)
+        && !can_levitate(mtmp) && Levitation
         && !Lev_at_will) {
         You("cannot reach %s.", mon_nam(mtmp));
         return (FALSE);
@@ -689,7 +704,8 @@ boolean force;      /* Quietly force this animal */
     /* Success */
     maybewakesteed(mtmp);
     if (!force) {
-        if (Levitation && !is_floater(ptr) && !is_flyer(ptr))
+        if (Levitation && !is_floater(ptr)
+            && !is_flyer(ptr) && !can_levitate(mtmp))
             /* Must have Lev_at_will at this point */
             pline("%s magically floats up!", Monnam(mtmp));
         You("mount %s.", mon_nam(mtmp));
@@ -933,17 +949,12 @@ int reason; /* Player was thrown off etc. */
             /* still no spot; last resort is any spot within bounds */
             (void) enexto(&steedcc, u.ux, u.uy, &mons[PM_GHOST]);
     }
-    if (!m_at(steedcc.x, steedcc.y)) {
-        if (mtmp->mhp < 1)
-            mtmp->mhp = 0; /* make sure it isn't negative */
-        mtmp->mhp++; /* force at least one hit point, possibly resurrecting */
-        place_monster(mtmp, steedcc.x, steedcc.y);
-        mtmp->mhp--; /* take the extra hit point away: cancel resurrection */
-    } else {
-        impossible("Dismounting: can't place former steed on map.");
-    }
 
     if (!DEADMONSTER(mtmp)) {
+        in_steed_dismounting++;
+        place_monster(mtmp, steedcc.x, steedcc.y);
+        in_steed_dismounting--;
+
         /* if for bones, there's no reason to place the hero;
            we want to make room for potential ghost, so move steed */
         if (reason == DISMOUNT_BONES) {
@@ -955,12 +966,15 @@ int reason; /* Player was thrown off etc. */
             return;
         }
 
-        /* Set hero's and/or steed's positions.  Try moving the hero first. */
+        /* Set hero's and/or steed's positions.  Usually try moving the
+           hero first.  Note: for DISMOUNT_ENGULFED, caller hasn't set
+           u.uswallow yet but has set u.ustuck. */
         if (!u.uswallow && !u.ustuck && have_spot) {
             struct permonst *mdat = mtmp->data;
 
             /* The steed may drop into water/lava */
-            if (!is_flyer(mdat) && !is_floater(mdat) && !is_clinger(mdat)) {
+            if (!is_flyer(mdat) && !is_floater(mdat)
+                && !is_clinger(mdat) && !can_levitate(mtmp)) {
                 if (is_pool(u.ux, u.uy)) {
                     if (!Underwater)
                         pline("%s falls into the %s!", Monnam(mtmp),
@@ -1025,8 +1039,9 @@ int reason; /* Player was thrown off etc. */
             rloc_to(mtmp, cc.x, cc.y);
             /* Player stays put */
 
-        /* Otherwise, kill the steed. */
+        /* Otherwise, steed goes bye-bye. */
         } else {
+#if 1       /* original there's-no-room handling */
             if (reason == DISMOUNT_BYCHOICE) {
                 /* [un]#ride: hero gets credit/blame for killing steed */
                 killed(mtmp);
@@ -1037,6 +1052,18 @@ int reason; /* Player was thrown off etc. */
                    damage type is just "neither AD_DGST nor -AD_RBRE" */
                 monkilled(mtmp, "", -AD_PHYS);
             }
+#else
+            /* Can't use this [yet?] because it violates monmove()'s
+             * assumption that a moving monster (engulfer) can't cause
+             * another monster (steed) to be removed from the fmon list.
+             * That other monster (steed) might be cached as the next one
+             * to move.
+             */
+            /* migrate back to this level if hero leaves and returns
+               or to next level if it is happening in the endgame */
+            mdrop_special_objs(mtmp);
+            deal_with_overcrowding(mtmp);
+#endif
         }
     } /* !DEADMONST(mtmp) */
 
@@ -1124,7 +1151,7 @@ int x, y;
                    minimal_monnam(mon, TRUE), x, y, mon->mstate, buf);
         x = y = 0;
     }
-    if (mon == u.usteed
+    if ((mon == u.usteed && !in_steed_dismounting)
         /* special case is for convoluted vault guard handling */
         || (DEADMONSTER(mon) && !(mon->isgd && x == 0 && y == 0))) {
         describe_level(buf);

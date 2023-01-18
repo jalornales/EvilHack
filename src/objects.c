@@ -308,6 +308,9 @@ WEAPON("staff of escape", "darkwood staff",
        0, 0, 1, 1,  5,  40, 400,  6,  6, 0, B,   P_QUARTERSTAFF, WOOD, CLR_BLACK),
 WEAPON("staff of war", "ironshod staff",
        0, 0, 1, 1,  5,  50, 425,  6,  6, 2, B,   P_QUARTERSTAFF, IRON, HI_METAL),
+/* template for the Staff of the Archmagi */
+WEAPON("ashwood staff", None,
+       0, 0, 1, 1,  0,  40, 600,  8, 10, 0, B,   P_QUARTERSTAFF, WOOD, CLR_WHITE),
 /* two-piece */
 WEAPON("aklys", "thonged club",
        0, 0, 0, 0,  8,  15,   4,  6,  3, 0, B,   P_CLUB, IRON, HI_METAL),
@@ -422,6 +425,7 @@ DRGN_SCALES("green dragon scales",      0, POISON_RES,        500, CLR_GREEN),
 DRGN_SCALES("gold dragon scales",       0, 0,                 500, HI_GOLD),
 DRGN_SCALES("sea dragon scales",        0, MAGICAL_BREATHING, 500, HI_ZAP),
 DRGN_SCALES("yellow dragon scales",     0, ACID_RES,          500, CLR_YELLOW),
+DRGN_SCALES("celestial dragon scales",  0, FLYING,           1000, CLR_BRIGHT_MAGENTA),
 DRGN_SCALES("chromatic dragon scales",  0, ANTIMAGIC,        1500, CLR_MAGENTA),
 #undef DRGN_SCALES
 /* other suits */
@@ -713,7 +717,8 @@ TOOL("expensive camera",    None, 1, 0, 0, 1,  15,  12, 200, PLASTIC, CLR_BLACK)
 TOOL("mirror",   "looking glass", 0, 0, 0, 0,  45,  13,  10, GLASS, HI_SILVER),
 TOOL("crystal ball", "glass orb", 0, 0, 1, 1,  15, 150,  60, GLASS, HI_GLASS),
 TOOL("eight ball", "plastic orb", 0, 0, 0, 0,   0,  20,  30, PLASTIC, CLR_BLACK),
-TOOL("lenses",              None, 1, 0, 0, 0,   5,   3,  80, GLASS, HI_GLASS),
+TOOL("lenses",              None, 1, 0, 0, 0,   4,   3,  80, GLASS, HI_GLASS),
+TOOL("goggles",             None, 1, 0, 0, 0,   1,   3,  50, PLASTIC, CLR_BLACK),
 TOOL("blindfold",           None, 1, 0, 0, 0,  50,   2,  20, CLOTH, CLR_BLACK),
 TOOL("towel",               None, 1, 0, 0, 0,  50,   2,  50, CLOTH, CLR_MAGENTA),
 TOOL("saddle",              None, 1, 0, 0, 0,   5, 200, 150, LEATHER, HI_LEATHER),

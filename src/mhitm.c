@@ -18,6 +18,7 @@ static const char brief_feeling[] =
 STATIC_DCL int FDECL(hitmm, (struct monst *, struct monst *,
                              struct attack *, struct obj *, int));
 STATIC_DCL int FDECL(gazemm, (struct monst *, struct monst *, struct attack *));
+STATIC_DCL int FDECL(screamm, (struct monst *, struct monst *, struct attack *));
 STATIC_DCL int FDECL(gulpmm, (struct monst *, struct monst *, struct attack *));
 STATIC_DCL int FDECL(explmm, (struct monst *, struct monst *, struct attack *));
 STATIC_DCL int FDECL(mdamagem, (struct monst *, struct monst *,
@@ -657,6 +658,11 @@ register struct monst *magr, *mdef;
             res[i] = gazemm(magr, mdef, mattk);
             break;
 
+        case AT_SCRE:
+            strike = 0;
+            res[i] = screamm(magr, mdef, mattk);
+            break;
+
         case AT_EXPL:
             /* D: Prevent explosions from a distance */
             if (distmin(magr->mx, magr->my, mdef->mx, mdef->my) > 1)
@@ -782,15 +788,14 @@ struct obj *mwep;
 int dieroll;
 {
     struct obj *otmp;
+    boolean weaponhit = ((mattk->aatyp == AT_WEAP
+                          || (mattk->aatyp == AT_CLAW && mwep))),
+            showit = FALSE;
 
     /* Possibly awaken nearby monsters */
     if ((!is_silent(magr->data) || !helpless(mdef)) && rn2(10)) {
         wake_nearto(magr->mx, magr->my, combat_noise(magr->data));
     }
-
-    boolean weaponhit = ((mattk->aatyp == AT_WEAP
-                          || (mattk->aatyp == AT_CLAW && mwep))),
-            showit = FALSE;
 
     /* unhiding or unmimicking happens even if hero can't see it
        because the formerly concealed monster is now in action */
@@ -971,6 +976,30 @@ struct attack *mattk;
     return mdamagem(magr, mdef, mattk, (struct obj *) 0, 0, &otmp);
 }
 
+/* Returns the same values as mdamagem(). */
+STATIC_OVL int
+screamm(magr, mdef, mattk)
+register struct monst *magr, *mdef;
+struct attack *mattk;
+{
+    struct obj *otmp;
+
+    if (canseemon(magr) && !Deaf) {
+        pline("%s lets out a %s!", Monnam(magr),
+              magr->data == &mons[PM_NAZGUL] ? "bloodcurdling scream"
+                                             : "deafening roar");
+        if (!mdef->mstun) {
+            if (canseemon(mdef))
+                pline("%s reels from the noise!", Monnam(mdef));
+        } else {
+            if (canseemon(mdef))
+                pline("%s struggles to keep its balance.", Monnam(mdef));
+        }
+    }
+
+    return mdamagem(magr, mdef, mattk, (struct obj *) 0, 0, &otmp);
+}
+
 /* return True if magr is allowed to swallow mdef, False otherwise */
 boolean
 engulf_target(magr, mdef)
@@ -980,7 +1009,8 @@ struct monst *magr, *mdef;
     int dx, dy;
 
     /* can't swallow something that's too big */
-    if (r_data(mdef)->msize >= MZ_HUGE)
+    if (r_data(mdef)->msize >= MZ_HUGE
+        || (r_data(magr)->msize < r_data(mdef)->msize && !is_whirly(magr->data)))
         return FALSE;
 
     /* can't swallow trapped monsters. TODO: could do some? */
@@ -1210,6 +1240,10 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
         tmp = d((int) mattk->damn, (int) mattk->damd),
         res = MM_MISS;
     boolean cancelled;
+    struct obj* hated_obj;
+    long armask;
+    boolean mon_vorpal_wield = (MON_WEP(mdef)
+                                && MON_WEP(mdef)->oartifact == ART_VORPAL_BLADE);
 
     if ((touch_petrifies(pd) /* or flesh_petrifies() */
          || (mattk->adtyp == AD_DGST && pd == &mons[PM_MEDUSA]))
@@ -1251,8 +1285,7 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
     cancelled = magr->mcan || !(rn2(10) >= 3 * armpro);
 
     /* check for special damage sources (e.g. hated material) */
-    long armask = attack_contact_slots(magr, mattk->aatyp);
-    struct obj* hated_obj;
+    armask = attack_contact_slots(magr, mattk->aatyp);
     tmp += special_dmgval(magr, mdef, armask, &hated_obj);
     if (hated_obj) {
         searmsg(magr, mdef, hated_obj, FALSE);
@@ -1353,11 +1386,12 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
         }
         goto physical;
     case AD_BHED:
-        if ((!rn2(15) || is_jabberwock(mdef->data)) && !magr->mcan) {
+        if ((!rn2(15) || is_jabberwock(mdef->data))
+            && !magr->mcan) {
             Strcpy(buf, Monnam(magr));
-            if (!has_head(mdef->data)) {
+            if (!has_head(mdef->data) || mon_vorpal_wield) {
                 if (canseemon(mdef))
-                    pline("Somehow, %s misses %s wildly.", buf, mon_nam(mdef));
+                    pline("%s somehow misses %s wildly.", buf, mon_nam(mdef));
                 tmp = 0;
                 break;
             }
@@ -1368,10 +1402,11 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
                 goto physical;
             }
             if (mdef->data == &mons[PM_CERBERUS]) {
-                pline("%s removes one of %s heads!", buf,
-                      s_suffix(mon_nam(mdef)));
-                if (canseemon(mdef))
+                if (canseemon(mdef)) {
+                    pline("%s removes one of %s heads!", buf,
+                          s_suffix(mon_nam(mdef)));
                     You("watch in horror as it quickly grows back.");
+                }
                 tmp = rn2(15) + 10;
                 goto physical;
             }
@@ -1393,6 +1428,9 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
  physical:
         if (mattk->aatyp != AT_WEAP && mattk->aatyp != AT_CLAW)
             mwep = 0;
+
+        if (magr->mberserk && !rn2(3))
+            tmp += d((int) mattk->damn, (int) mattk->damd);
 
         if (shade_miss(magr, mdef, mwep, FALSE, TRUE)) {
             tmp = 0;
@@ -1436,7 +1474,8 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
             if (tmp >= mdef->mhp && mdef->mhp > 1)
                 tmp = mdef->mhp - 1;
         }
-        if (mattk->adtyp == AD_CLOB && tmp > 0 && !rn2(6)) {
+        if (mattk->adtyp == AD_CLOB && tmp > 0
+            && !unsolid(mdef->data) && !rn2(6)) {
             if (tmp < mdef->mhp) {
                 if (vis && canseemon(mdef))
                     pline("%s knocks %s back with a %s %s!",
@@ -1478,7 +1517,7 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
             }
         }
         if (vis && canseemon(mdef))
-            pline("%s is %s!", Monnam(mdef), on_fire(pd, mattk));
+            pline("%s is %s!", Monnam(mdef), on_fire(mdef, mattk->aatyp == AT_HUGS ? ON_FIRE_HUG : ON_FIRE));
         if (completelyburns(pd)) { /* paper golem or straw golem */
             if (vis && canseemon(mdef))
                 pline("%s burns completely!", Monnam(mdef));
@@ -1539,8 +1578,10 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
             tmp = 0;
             break;
         }
-        if (vis && canseemon(mdef) && !Deaf)
-            pline("%s reels from the noise!", Monnam(mdef));
+
+        if (!mdef->mstun)
+            mdef->mstun = 1;
+
         if (!rn2(6))
             erode_armor(mdef, ERODE_FRACTURE);
         tmp += destroy_mitem(mdef, RING_CLASS, AD_LOUD);
@@ -1694,10 +1735,6 @@ post_stone:
         break;
     case AD_TLPT:
         if (!cancelled && tmp < mdef->mhp && !tele_restrict(mdef)) {
-	    /* works on other critters too.. */
-	    if (magr->mnum == PM_BOOJUM) {
-		mdef->perminvis = mdef->minvis = TRUE;
-	    }
             char mdef_Monnam[BUFSZ];
             boolean wasseen = canspotmon(mdef);
 
@@ -1705,6 +1742,9 @@ post_stone:
                we'll get "it" in the suddenly disappears message */
             if (vis && wasseen)
                 Strcpy(mdef_Monnam, Monnam(mdef));
+            /* works on other critters too.. */
+            if (magr->mnum == PM_BOOJUM)
+                mdef->perminvis = mdef->minvis = TRUE;
             mdef->mstrategy &= ~STRAT_WAITFORU;
             (void) rloc(mdef, TRUE);
             if (vis && wasseen && !canspotmon(mdef) && mdef != u.usteed)
@@ -2079,10 +2119,13 @@ post_stone:
                 return MM_MISS;
             }
         }
-        if (immune_death_magic(mdef->data)) {
+        if (immune_death_magic(mdef->data)
+            || defended(mdef, AD_DETH)) {
             /* Still does normal damage */
             if (vis)
-                pline("%s looks no more dead than before.", Monnam(mdef));
+                pline("%s %s.", Monnam(mdef),
+                      nonliving(mdef->data) ? "looks no more dead than before"
+                                            : "is unaffected");
             break;
         }
         switch (rn2(20)) {
@@ -2242,13 +2285,13 @@ msickness:
         break;
     case AD_WTHR: {
         uchar withertime = max(2, tmp);
-        tmp = 0; /* doesn't deal immediate damage */
         boolean no_effect =
             (nonliving(pd) /* This could use is_fleshy(), but that would
                               make a large set of monsters immune like
                               fungus, blobs, and jellies. */
              || is_vampshifter(mdef) || cancelled);
         boolean lose_maxhp = (withertime >= 8); /* if already withering */
+        tmp = 0; /* doesn't deal immediate damage */
 
         if (!no_effect) {
             if (canseemon(mdef))
@@ -2267,7 +2310,7 @@ msickness:
         }
         break;
     }
-    case AD_DISN: /* currently only called via AT_GAZE */
+    case AD_DISN:
         if (!rn2(5)) {
             struct obj *otmp = (struct obj *) 0, *otmp2;
 
@@ -2334,6 +2377,8 @@ msickness:
                     if (!m_amulet)
                         pline("%s is disintegrated!", Monnam(mdef));
                     else
+                        /* FIXME? the gaze? this handles other types of
+                           disintegration attacks too */
                         pline("%s crumbles under the gaze!",
                               Monnam(mdef));
                 }
@@ -2358,8 +2403,11 @@ msickness:
                 else
                     monkilled(mdef, (char *) 0, -AD_RBRE);
                 tmp = 0;
-                return (MM_DEF_DIED | (grow_up(magr, mdef) ? 0 : MM_AGR_DIED));
-                break;
+                if (DEADMONSTER(mdef))
+                    res |= MM_DEF_DIED; /* not lifesaved */
+                if (!grow_up(magr, mdef))
+                    res |= MM_AGR_DIED;
+                return res;
             }
         }
         break;
@@ -2629,32 +2677,6 @@ struct obj *obj;
         (void) erode_obj(obj, (char *) 0, dmgtyp, EF_GREASE | EF_DESTROY);
 }
 
-/* passive disintegration function vs monsters.
-   bulk of this taken from disintegrate_mon */
-void
-passive_disint_mon(mon)
-struct monst *mon;
-{
-    struct obj *otmp, *otmp2, *m_amulet = mlifesaver(mon);
-
-/* note: worn amulet of life saving must be preserved in order to operate */
-#define oresist_disintegration(obj)                                       \
-    (objects[obj->otyp].oc_oprop == DISINT_RES || obj_resists(obj, 5, 50) \
-     || is_quest_artifact(obj) || obj == m_amulet)
-
-    for (otmp = mon->minvent; otmp; otmp = otmp2) {
-        otmp2 = otmp->nobj;
-        if (!oresist_disintegration(otmp)) {
-            extract_from_minvent(mon, otmp, TRUE, TRUE);
-            obfree(otmp, (struct obj *) 0);
-        }
-    }
-
-#undef oresist_disintegration
-
-    monkilled(mon, "", AD_RBRE);
-}
-
 STATIC_OVL void
 mswingsm(magr, mdef, otemp)
 struct monst *magr, *mdef;
@@ -2769,7 +2791,8 @@ struct obj *mwep;
                                   s_suffix(Monnam(mdef)),
                                   mdef->data == &mons[PM_ANTIMATTER_VORTEX]
                                       ? "form" : "hide", mon_nam(magr));
-                        passive_disint_mon(magr);
+                        disint_mon_invent(magr);
+                        monkilled(magr, "", AD_DISN);
                         return (mdead | mhit | MM_AGR_DIED);
                     }
                 }

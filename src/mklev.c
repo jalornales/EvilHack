@@ -286,9 +286,10 @@ rndvault_getname()
 {
     if (!rndvault_gen) rndvault_gen_load();
     if (rndvault_gen) {
+        struct _rndvault *tmp = rndvault_gen->vaults;
         long cdepth = depth(&u.uz);
+        long frq;
         if (curr_total_freq == -1 || curr_vault_depth != cdepth) {
-            struct _rndvault *tmp = rndvault_gen->vaults;
             curr_total_freq = 0;
             while (tmp) {
                 if (cdepth >= tmp->mindepth)
@@ -297,9 +298,8 @@ rndvault_getname()
             }
             curr_vault_depth = cdepth;
         }
-        long frq = rn2(curr_total_freq);
-	struct _rndvault *tmp = rndvault_gen->vaults;
-
+        frq = rn2(curr_total_freq);
+        tmp = rndvault_gen->vaults;
         while (tmp) {
             if (cdepth >= tmp->mindepth)
                 frq -= tmp->freq;
@@ -1599,6 +1599,12 @@ coord *tm;
                            || is_sewage(tm->x, tm->y)))
                     kind = NO_TRAP;
                 break;
+            case PIT:
+            case TRAPDOOR:
+                if (tm && (is_puddle(tm->x, tm->y)
+                           || is_sewage(tm->x, tm->y)))
+                    kind = NO_TRAP;
+                break;
             }
         } while (kind == NO_TRAP);
     }
@@ -1795,6 +1801,8 @@ xchar x, y;
 char up;
 struct mkroom *croom;
 {
+    struct monst *mtmp;
+
     if (!x) {
         impossible("mkstairs:  bogus stair attempt at <%d,%d>", x, y);
         return;
@@ -1819,8 +1827,18 @@ struct mkroom *croom;
         dnstairs_room = croom;
     }
 
+    if (levl[x][y].typ == ICE)
+        spot_stop_timers(x, y, MELT_ICE_AWAY);
+
     levl[x][y].typ = STAIRS;
     levl[x][y].ladder = up ? LA_UP : LA_DOWN;
+
+    /* added because makeriver() runs before mkstairs()
+       in the gnomish mines */
+    if ((mtmp = m_at(x, y)) != 0) {
+        if (is_swimmer(mtmp->data) && mtmp->mundetected)
+            mtmp->mundetected = 0;
+    }
 }
 
 STATIC_OVL void
@@ -2017,6 +2035,51 @@ mkinvokearea()
     livelog_write_string(LL_ACHIEVE, "performed the invocation");
 }
 
+void
+mkgate()
+{
+    const int a = 66, b = 16,
+              x = 17, y1 = 10, y2 = 11;
+
+    /* don't do this if we're not in the sanctum */
+    if (!Is_sanctum(&u.uz))
+        return;
+
+    /* create the gates leading from the inner sanctum
+       to Lucifer and the portal to Purgatory */
+    levl[x][y1].typ = DOOR;
+    levl[x][y2].typ = DOOR;
+    levl[x][y1].doormask = D_LOCKED;
+    levl[x][y2].doormask = D_LOCKED;
+    if (cansee(x, y1))
+        newsym(x, y1);
+    if (cansee(x, y2))
+        newsym(x, y2);
+
+    if (cansee (x, y1) || cansee(x, y2)) {
+        pline("As you %s, the far wall of the sanctum warps.",
+              Role_if(PM_INFIDEL) ? "imbue the Idol of Moloch"
+                                  : "pickup the Amulet of Yendor");
+        pline("A gate appears where the wall used to be.");
+    }
+
+    /* once u.uachieve.amulet is triggered (touching the
+       Amulet of Yendor or, as an Infidel, imbuing the Idol
+       of Moloch for the first time), stair access leading
+       out of the sanctum is removed - the only way out is
+       forward, through Purgatory */
+
+    /* we know the exact location of the stairs leading
+       back up, no need to setup a for loop to find them */
+    xupstair = 0; /* remove stairs mask */
+    if ((levl[a][b].typ = STAIRS))
+        levl[a][b].typ = ROOM;
+    if (cansee(a, b))
+        newsym(a, b);
+
+    vision_full_recalc = 1;
+}
+
 /* Change level topology.  Boulders in the vicinity are eliminated.
  * Temporarily overrides vision in the name of a nice effect.
  */
@@ -2136,8 +2199,8 @@ xchar x, y;
         source = &br->end1;
     }
 
-    /* Already set or 2/3 chance of deferring until a later level. */
-    if (source->dnum < n_dgns || (rn2(3) && !wizard))
+    /* Already set */
+    if (source->dnum < n_dgns)
         return;
 
     if (!(u.uz.dnum == oracle_level.dnum      /* in main dungeon */

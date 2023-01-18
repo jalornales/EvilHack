@@ -54,9 +54,6 @@ STATIC_DCL void FDECL(wishcmdassist, (int));
 
 #define is_hero_spell(type) ((type) >= 10 && (type) < 20)
 
-#define M_IN_WATER(ptr) \
-    ((ptr)->mlet == S_EEL || amphibious(ptr) || is_swimmer(ptr))
-
 STATIC_VAR const char are_blinded_by_the_flash[] =
     "are blinded by the flash!";
 
@@ -145,7 +142,8 @@ struct monst *mtmp;
 struct obj *otmp;
 {
     boolean wake = TRUE; /* Most 'zaps' should wake monster */
-    boolean reveal_invis = FALSE, learn_it = FALSE;
+    boolean reveal_invis = FALSE, learn_it = FALSE,
+            already_killed = FALSE;
     boolean dbldam = Role_if(PM_KNIGHT) && u.uhave.questart;
     boolean skilled_spell, helpful_gesture = FALSE;
     int dmg, otyp = otmp->otyp;
@@ -184,12 +182,16 @@ struct obj *otmp;
             hit(zap_type_text, mtmp, exclam(dmg));
             if (dmg > 16) {
                 last_hurtled = mtmp;
-                pline_The("force of %s knocks %s back!",
-                          (otyp == SPE_FORCE_BOLT) ? "your spell" : "the wand",
-                          mon_nam(mtmp));
-                mhurtle_to_doom(mtmp, dmg, &mdat, FALSE);
+                if (dmg < mtmp->mhp) {
+                    pline_The("force of %s knocks %s back!",
+                              (otyp == SPE_FORCE_BOLT) ? "your spell" : "the wand",
+                              mon_nam(mtmp));
+                    if (mhurtle_to_doom(mtmp, dmg, &mdat, FALSE))
+                        already_killed = TRUE;
+                }
             }
-            (void) resist(mtmp, otmp->oclass, dmg, TELL);
+            if (!already_killed)
+                (void) resist(mtmp, otmp->oclass, dmg, TELL);
         } else
             miss(zap_type_text, mtmp);
         learn_it = TRUE;
@@ -356,6 +358,8 @@ struct obj *otmp;
                    for all long worms on the level */
                 context.bypasses = TRUE;
             }
+            if (mtmp->mpeaceful)
+                helpful_gesture = TRUE;
         }
         break;
     case WAN_CANCELLATION:
@@ -1372,6 +1376,7 @@ int ochance, achance; /* percent chance for ordinary objects, artifacts */
         || obj->otyp == SPE_BOOK_OF_THE_DEAD
         || obj->otyp == CANDELABRUM_OF_INVOCATION
         || obj->otyp == BELL_OF_OPENING
+        || obj->oartifact == ART_SWORD_OF_ANNIHILATION
         || (obj->otyp == CORPSE && is_rider(&mons[obj->corpsenm]))) {
         return TRUE;
     } else {
@@ -1988,7 +1993,8 @@ struct obj *obj;
         obj = poly_obj(obj, MEATBALL);
         smell = TRUE;
         break;
-    case WEAPON_CLASS: /* crysknife */
+    case ARMOR_CLASS:
+    case WEAPON_CLASS:
         /* FALLTHRU */
     default:
         if (valid_obj_material(obj, FLESH)) {
@@ -2240,8 +2246,7 @@ struct obj *obj, *otmp;
                 } else {
                     if (cansee(ox, oy)) {
                         if (canspotmon(mtmp)) {
-                            pline("%s is resurrected!",
-                                  upstart(noname_monnam(mtmp, ARTICLE_THE)));
+                            pline("%s is resurrected!", Monnam(mtmp));
                             if (by_u)
                                 learn_it = TRUE;
                         } else {
@@ -2484,7 +2489,8 @@ dozap()
         if ((damage = zapyourself(obj, TRUE)) != 0) {
             char buf[BUFSZ];
 
-            Sprintf(buf, "zapped %sself with a wand", uhim());
+            Sprintf(buf, "zapped %sself with %s",
+                    uhim(), killer_xname(obj));
             losehp(Maybe_Half_Phys(damage), buf, NO_KILLER_PREFIX);
         }
     } else {
@@ -2702,9 +2708,9 @@ boolean ordinary;
             You_feel("rather itchy under %s.", yname(uarmc));
             break;
         }
-        if (!EInvis && (HInvis & TIMEOUT) && obj->cursed) {
+        if (!EInvis && HInvis && obj->cursed) {
             You("become visible.");
-            HInvis = (HInvis & ~TIMEOUT);
+            HInvis = (HInvis & ~(TIMEOUT | INTRINSIC));
             learn_it = TRUE;
             newsym(u.ux, u.uy);
             if (rn2(2)) {
@@ -2718,8 +2724,8 @@ boolean ordinary;
                 else
                     You_feel("an odd sensation for a brief moment.");
             } else {
-	        /* wand and potion now only do temporary invis,
-	         * to make the cloak and ring more useful */
+                /* wand and potion now only do temporary invis,
+                 * to make the cloak and ring more useful */
                 incr_itimeout(&HInvis, d(1 + obj->spe, 250));
                 if (msg) {
                     learn_it = TRUE;
@@ -2761,10 +2767,8 @@ boolean ordinary;
 
     case WAN_SLOW_MONSTER:
     case SPE_SLOW_MONSTER:
-        if (HFast & (TIMEOUT | INTRINSIC)) {
-            learn_it = TRUE;
-            u_slow_down();
-        }
+        learn_it = TRUE;
+        u_slow_down();
         break;
 
     case WAN_TELEPORTATION:
@@ -2778,10 +2782,13 @@ boolean ordinary;
 
     case WAN_DEATH:
     case SPE_FINGER_OF_DEATH:
-        if (immune_death_magic(youmonst.data)) {
+        if (Death_resistance || immune_death_magic(youmonst.data)) {
+            shieldeff(u.ux, u.uy);
             pline((obj->otyp == WAN_DEATH)
                       ? "The wand shoots an apparently harmless beam at you."
-                      : "You seem no more dead than before.");
+                      : nonliving(youmonst.data)
+                          ? "You seem no more dead than before."
+                          : "You are unaffected.");
             break;
         }
         learn_it = TRUE;
@@ -2822,13 +2829,12 @@ boolean ordinary;
     case EXPENSIVE_CAMERA:
         if (!damage)
             damage = 5;
-        if (obj->otyp == WAN_LIGHT && !cursed(obj, TRUE)) {
-            damage = lightdamage(obj, ordinary, damage);
-            damage += rnd(25);
+        damage = lightdamage(obj, ordinary, damage);
+        damage += rnd(25);
+        if (flashburn((long) damage))
+            learn_it = TRUE;
+        if (obj->otyp == WAN_LIGHT && !cursed(obj, TRUE))
             blindingflash();
-            if (flashburn((long) damage))
-                learn_it = TRUE;
-        }
         damage = 0; /* reset */
         break;
     case WAN_OPENING:
@@ -4277,6 +4283,7 @@ struct obj **ootmp; /* to return worn armor for caller to disintegrate */
                 break;
             }
             if (immune_death_magic(mon->data)
+                || defended(mon, AD_DETH)
                 || is_vampshifter(mon)) {
                 sho_shieldeff = TRUE;
                 tmp = 0;
@@ -4504,7 +4511,8 @@ xchar sx, sy;
                 if (uarmu)
                     (void) destroy_arm(uarmu);
             }
-        } else if (immune_death_magic(youmonst.data)) {
+        } else if (Death_resistance
+                   || immune_death_magic(youmonst.data)) {
             shieldeff(sx, sy);
             You("seem unaffected.");
             break;
@@ -6320,10 +6328,6 @@ makewish()
                        "wished for \"%s\"", bufcpy);
 
     if (otmp != &zeroobj) {
-#ifdef WISH_TRACKER
-        /* write it out to our universal wishtracker file */
-        trackwish(bufcpy);
-#endif
         const char
             *verb = ((Is_airlevel(&u.uz) || u.uinwater) ? "slip" : "drop"),
             *oops_msg = (u.uswallow
@@ -6334,6 +6338,10 @@ makewish()
                             ? "Oops!  %s away from you!"
                             : "Oops!  %s to the floor!");
 
+#ifdef WISH_TRACKER
+        /* write it out to our universal wishtracker file */
+        trackwish(bufcpy);
+#endif
         /* The(aobjnam()) is safe since otmp is unidentified -dlc */
         (void) hold_another_object(otmp, oops_msg,
                                    The(aobjnam(otmp, verb)),

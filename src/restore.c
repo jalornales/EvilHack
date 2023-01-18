@@ -36,7 +36,7 @@ STATIC_DCL struct fruit *FDECL(loadfruitchn, (int));
 STATIC_DCL void FDECL(freefruitchn, (struct fruit *));
 STATIC_DCL void FDECL(ghostfruit, (struct obj *));
 STATIC_DCL boolean FDECL(restgamestate, (int, unsigned int *, unsigned int *));
-STATIC_DCL void FDECL(restmonsteeds, (boolean));
+STATIC_DCL void FDECL(restmonsteeds, (BOOLEAN_P));
 STATIC_DCL void FDECL(restlevelstate, (unsigned int, unsigned int));
 STATIC_DCL int FDECL(restlevelfile, (int, XCHAR_P));
 STATIC_OVL void FDECL(restore_msghistory, (int));
@@ -450,7 +450,8 @@ boolean ghostly;
         offset = mtmp->mnum;
         mtmp->data = &mons[offset];
         if (ghostly) {
-            int mndx = monsndx(mtmp->data);
+            int mndx = (mtmp->cham == NON_PM) ? monsndx(mtmp->data)
+                                              : mtmp->cham;
             if (propagate(mndx, TRUE, ghostly) == 0) {
                 /* cookie to trigger purge in getbones() */
                 mtmp->mhpmax = DEFUNCT_MONSTER;

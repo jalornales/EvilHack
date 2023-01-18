@@ -485,7 +485,7 @@ boolean with_you;
         xlocale = sstairs.sx, ylocale = sstairs.sy;
         break;
     case MIGR_PORTAL:
-        if (In_endgame(&u.uz)) {
+        if (In_endgame(&u.uz) || Is_stronghold(&u.uz)) {
             /* there is no arrival portal for endgame levels */
             /* BUG[?]: for simplicity, this code relies on the fact
                that we know that the current endgame levels always
@@ -1052,9 +1052,11 @@ tamedog(mtmp, obj)
 register struct monst *mtmp;
 register struct obj *obj;
 {
-    /* The Wiz, Vecna, Cerberus, Medusa, the Goblin King
-       and the quest nemeses aren't even made peaceful. */
+    /* The Wiz, Vecna, Cerberus, Medusa, the Goblin King,
+       Lucifer, and the quest nemeses aren't even made
+       peaceful. */
     if (mtmp->iswiz || mtmp->isvecna
+        || mtmp->islucifer
         || mtmp->iscerberus || mtmp->isgking
         || mtmp->data == &mons[PM_MEDUSA]
         || (mtmp->data->mflags3 & M3_WANTSARTI)
@@ -1095,6 +1097,9 @@ register struct obj *obj;
         return FALSE;
 
     if (wielding_artifact(ART_ORCRIST) && racial_orc(mtmp))
+        return FALSE;
+
+    if (wielding_artifact(ART_GLAMDRING) && racial_orc(mtmp))
         return FALSE;
 
     if (wielding_artifact(ART_GRIMTOOTH) && racial_elf(mtmp))

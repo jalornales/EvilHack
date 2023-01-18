@@ -31,7 +31,6 @@ STATIC_DCL void FDECL(m_detach, (struct monst *, struct permonst *));
 STATIC_DCL void FDECL(lifesaved_monster, (struct monst *));
 STATIC_DCL void FDECL(migrate_mon, (struct monst *, XCHAR_P, XCHAR_P));
 STATIC_DCL boolean FDECL(ok_to_obliterate, (struct monst *));
-STATIC_DCL void FDECL(deal_with_overcrowding, (struct monst *));
 STATIC_DCL void FDECL(icequeenrevive, (struct monst *));
 
 /* note: duplicated in dog.c */
@@ -277,6 +276,8 @@ struct permonst *pm;
             return PM_HOBBIT_ZOMBIE;
         if (is_giant(pm))
             return PM_GIANT_ZOMBIE;
+        if (is_illithid(pm))
+            return NON_PM;
         return PM_HUMAN_ZOMBIE;
     case S_HUMANOID:
         if (is_dwarf(pm))
@@ -298,9 +299,9 @@ become_flayer(mdef)
 struct monst* mdef;
 {
     struct permonst* mdat = mdef->data;
-    boolean couldspot = canspotmon(mdef);
+    boolean willspot, couldspot = canspotmon(mdef);
     mdef->data = &mons[PM_MIND_FLAYER];
-    boolean willspot = canspotmon(mdef);
+    willspot = canspotmon(mdef);
     mdef->data = mdat;
 
     if (couldspot && willspot) {
@@ -310,6 +311,7 @@ struct monst* mdef;
     }
 
     if (newcham(mdef, &mons[PM_MIND_FLAYER], FALSE, FALSE)) {
+        char name[PL_PSIZ];
         /* off-chance Izchak succumbs to a mind flayer larva's physical attack */
         if (is_izchak(mdef, TRUE)) {
             pline("But wait!  %s transforms again into his true form!",
@@ -340,7 +342,6 @@ struct monst* mdef;
         /* wipe all mextra structs (to prevent a compromised shk/priest/guard/etc
          * from continuing to behave as what it used to be), then restore name
          * if present */
-        char name[PL_PSIZ];
         name[0] = '\0';
         if (has_eshk(mdef)) {
             if (!Hallucination)
@@ -565,6 +566,7 @@ unsigned corpseflags;
     case PM_GOLD_DRAGON:
     case PM_SEA_DRAGON:
     case PM_YELLOW_DRAGON:
+    case PM_CELESTIAL_DRAGON:
         /* Make dragon scales.  This assumes that the order of the
            dragons is the same as the order of the scales.
            If the dragon is a pet, no scales generated. */
@@ -787,18 +789,21 @@ register struct monst *mtmp;
 
     /* [ceiling clingers are handled below] */
     inpool = (is_pool(mtmp->mx, mtmp->my)
-              && (!(is_flyer(mtmp->data) || is_floater(mtmp->data))
+              && (!(is_flyer(mtmp->data)
+                    || is_floater(mtmp->data) || can_levitate(mtmp))
                   /* there's no "above the surface" on the plane of water */
                   || Is_waterlevel(&u.uz)));
     inlava = (is_lava(mtmp->mx, mtmp->my)
-              && !(is_flyer(mtmp->data) || is_floater(mtmp->data)));
+              && !(is_flyer(mtmp->data)
+                   || is_floater(mtmp->data) || can_levitate(mtmp)));
     infountain = IS_FOUNTAIN(levl[mtmp->mx][mtmp->my].typ);
     inforge = IS_FORGE(levl[mtmp->mx][mtmp->my].typ);
     inshallow = ((is_puddle(mtmp->mx, mtmp->my) || is_sewage(mtmp->mx, mtmp->my))
-                 && !(is_flyer(mtmp->data) || is_floater(mtmp->data)));
+                 && !(is_flyer(mtmp->data)
+                      || is_floater(mtmp->data) || can_levitate(mtmp)));
     inopenair = (is_open_air(mtmp->mx, mtmp->my)
                  && !(is_flyer(mtmp->data) || is_floater(mtmp->data)
-                      || is_clinger(mtmp->data)
+                      || is_clinger(mtmp->data) || can_levitate(mtmp)
                       || ((mtmp == u.usteed) && Flying)));
 
     /* Flying and levitation keeps our steed out of the liquid
@@ -887,17 +892,8 @@ register struct monst *mtmp;
                     return 0;
             }
             if (!(resists_fire(mtmp) || defended(mtmp, AD_FIRE))) {
-                if (cansee(mtmp->mx, mtmp->my)) {
-                    struct attack *dummy;
-                    dummy = has_erac(mtmp) ? &ERAC(mtmp)->mattk[0]
-                                           : &mtmp->data->mattk[0];
-                    const char *how = on_fire(mtmp->data, dummy);
-
-                    pline("%s %s.", Monnam(mtmp),
-                          !strcmp(how, "boiling") ? "boils away"
-                             : !strcmp(how, "melting") ? "melts away"
-                                : "burns to a crisp");
-                }
+                if (cansee(mtmp->mx, mtmp->my))
+                    pline("%s %s.", Monnam(mtmp), on_fire(mtmp, ON_FIRE_DEAD));
                 /* unlike fire -> melt ice -> pool, there's no way for the
                    hero to create lava beneath a monster, so the !mon_moving
                    case is not expected to happen (and we haven't made a
@@ -1012,6 +1008,9 @@ struct monst *mon;
      */
     if (mon->mspeed == MSLOW)
         mmove = (2 * mmove + 1) / 3;
+    /* various monsters get a slight bump in speed when in their natural element */
+    else if (is_pool(mon->mx, mon->my) && is_fast_underwater(mon->data))
+        mmove = (3 * mmove + 2) / 3;
     else if (mon->mspeed == MFAST)
         mmove = (4 * mmove + 2) / 3;
 
@@ -1117,6 +1116,16 @@ mcalcdistress()
             }
         }
 
+        /* temp vulnerability timeouts */
+        if (mtmp->vuln_fire > 0)
+            mtmp->vuln_fire--;
+        if (mtmp->vuln_cold > 0)
+            mtmp->vuln_cold--;
+        if (mtmp->vuln_elec > 0)
+            mtmp->vuln_elec--;
+        if (mtmp->vuln_acid > 0)
+            mtmp->vuln_acid--;
+
         /* must check non-moving monsters once/turn in case they managed
            to end up in water or lava; note: when not in liquid they regen,
            shape-shift, timeout temporary maladies just like other monsters */
@@ -1130,6 +1139,28 @@ mcalcdistress()
         /* regenerate hit points - note that if withering, they won't gain hp,
          * but we still need to call this for mspec_used */
         mon_regen(mtmp, FALSE);
+
+        if (is_berserker(mtmp->data) && !noattacks(mtmp->data)) {
+            if ((mtmp->mhp < (mtmp->mhpmax / 3)) && !mtmp->mberserk
+                && !rn2(15)) {
+                if (canseemon(mtmp) && humanoid(mtmp->data)
+                    && !mindless(mtmp->data)) {
+                    pline("%s flies into a berserker rage!",
+                          Monnam(mtmp));
+                } else if (canseemon(mtmp)) { /* animal/mindless */
+                    pline("%s seems to go berserk!", Monnam(mtmp));
+                } else {
+                    You_hear("an enraged %s %s!",
+                             !rn2(3) ? "roar" : rn2(2) ? "bellow" : "howl",
+                             (distu(mtmp->mx, mtmp->my) > (6 * 6)
+                                ? "in the distance" : "nearby"));
+                }
+                mtmp->mberserk = 1;
+                mtmp->mflee = 0;
+            } else if (mtmp->mhp > (mtmp->mhpmax / 2)) {
+                mtmp->mberserk = 0;
+            }
+        }
 
         /* sick monsters can die from their illness */
         if (mtmp->msick && mtmp->msicktime <= 1) {
@@ -1402,6 +1433,41 @@ movemon()
     return somebody_can_move;
 }
 
+/* dispose of contents of an eaten container; used for pets and other mons */
+void
+meatbox(mon, otmp)
+struct monst *mon;
+struct obj *otmp;
+{
+    boolean engulf_contents = (mon->data == &mons[PM_GELATINOUS_CUBE]);
+    int x = mon->mx, y = mon->my;
+    struct obj *cobj;
+
+    if (!Has_contents(otmp) || !isok(x, y)
+        || otmp->otyp == CRYSTAL_CHEST)
+        return;
+
+    /* contents of eaten containers become engulfed or dropped onto
+      the floor; this is arbitrary, but otherwise g-cubes are too
+      powerful */
+    if (!engulf_contents && cansee(x, y)) {
+        pline("%s contents spill out onto the %s.",
+              s_suffix(The(distant_name(otmp, xname))),
+              surface(x, y));
+    }
+    while ((cobj = otmp->cobj) != 0) {
+        obj_extract_self(cobj);
+        if (otmp->otyp == ICE_BOX)
+            removed_from_icebox(cobj);
+        if (engulf_contents) {
+            (void) mpickobj(mon, cobj);
+        } else {
+            if (!flooreffects(cobj, x, y, ""))
+                place_object(cobj, x, y);
+        }
+    }
+}
+
 #define mstoning(obj)                                       \
     (ofood(obj) && (touch_petrifies(&mons[(obj)->corpsenm]) \
                     || (obj)->corpsenm == PM_MEDUSA))
@@ -1417,7 +1483,7 @@ int
 meatmetal(mtmp)
 register struct monst *mtmp;
 {
-    register struct obj *otmp, *otmp2, *ncobj;
+    register struct obj *otmp;
     struct permonst *ptr;
     int poly, grow, heal, mstone;
 
@@ -1461,16 +1527,8 @@ register struct monst *mtmp;
                     if (mtmp->mhp > mtmp->mhpmax)
                         mtmp->mhp = mtmp->mhpmax;
                 }
-                if (Has_contents(otmp)) {
-                    if (cansee(mtmp->mx, mtmp->my))
-                        pline("Its contents fall out.");
-                    for (otmp2 = otmp->cobj; otmp2; otmp2 = ncobj) {
-                        ncobj = otmp2->nobj;
-                        obj_extract_self(otmp2);
-                        if (!flooreffects(otmp2, mtmp->mx, mtmp->my, ""))
-                            place_object(otmp2, mtmp->mx, mtmp->my);
-                    }
-                }
+                if (Has_contents(otmp))
+                    meatbox(mtmp, otmp);
                 if (otmp == uball) {
                     unpunish();
                     delobj(otmp);
@@ -1605,20 +1663,11 @@ struct monst *mtmp;
                 if (mtmp->mhp > mtmp->mhpmax)
                     mtmp->mhp = mtmp->mhpmax;
             }
-            if (Has_contents(otmp)) {
-                register struct obj *otmp3;
-
-                /* contents of eaten containers become engulfed; this
-                   is arbitrary, but otherwise g.cubes are too powerful */
-                while ((otmp3 = otmp->cobj) != 0) {
-                    obj_extract_self(otmp3);
-                    if (otmp->otyp == ICE_BOX && otmp3->otyp == CORPSE) {
-                        otmp3->age = monstermoves - otmp3->age;
-                        start_corpse_timeout(otmp3);
-                    }
-                    (void) mpickobj(mtmp, otmp3);
-                }
-            }
+            if (Has_contents(otmp))
+                meatbox(mtmp, otmp);
+            /* possibility of being turned to stone or into slime can't
+               reach here (don't touch for cockatrice corpse, engulf rather
+               than eat for tin, cockatrice egg, or glob of green slime) */
             poly = polyfodder(otmp);
             grow = mlevelgain(otmp);
             heal = mhealup(otmp);
@@ -1662,7 +1711,8 @@ register struct monst *mtmp;
     register struct obj *gold;
     int mat_idx;
 
-    if ((gold = g_at(mtmp->mx, mtmp->my)) != 0) {
+    if ((gold = g_at(mtmp->mx, mtmp->my)) != 0
+        && !(is_floater(mtmp->data) || can_levitate(mtmp))) {
         mat_idx = gold->material;
         obj_extract_self(gold);
         add_to_minv(mtmp, gold);
@@ -1736,6 +1786,68 @@ register struct monst *mtmp;
     return 0;
 }
 
+/* corpses Gollum will eat */
+int
+gollum_eat(mtmp)
+register struct monst *mtmp;
+{
+    register struct obj *otmp;
+    struct permonst *ptr;
+    int grow, heal, mstone;
+
+    /* Gollum can't be tamed, but we'll leave this here anyways */
+    if (mtmp->mtame)
+        return 0;
+
+    /* Eats topmost corpse if it is there */
+    for (otmp = level.objects[mtmp->mx][mtmp->my]; otmp;
+         otmp = otmp->nexthere) {
+        /* Don't eat indigestible/inappropriate objects */
+        if (mtmp->data == &mons[PM_GOLLUM] && !is_gollumfood(otmp))
+            continue;
+        if (is_gollumfood(otmp)) {
+            if (mtmp->data == &mons[PM_GOLLUM]) {
+                if (cansee(mtmp->mx, mtmp->my) && flags.verbose)
+                    pline("%s eats %s!", Monnam(mtmp),
+                          distant_name(otmp, doname));
+                else if (!Deaf && flags.verbose)
+                    You_hear("a smacking sound.");
+                /* Gollum can eat very fast */
+                mtmp->meating = rnd(3) + 1;
+                /* Heal up to the object's weight in hp */
+                if (mtmp->mhp < mtmp->mhpmax) {
+                    mtmp->mhp += objects[otmp->otyp].oc_weight;
+                    if (mtmp->mhp > mtmp->mhpmax)
+                        mtmp->mhp = mtmp->mhpmax;
+            }
+            grow = mlevelgain(otmp);
+            heal = mhealup(otmp);
+            mstone = mstoning(otmp);
+            delobj(otmp);
+            ptr = mtmp->data;
+            if (grow) {
+                ptr = grow_up(mtmp, (struct monst *) 0);
+            } else if (mstone) {
+                if (poly_when_stoned(ptr)) {
+                    mon_to_stone(mtmp);
+                    ptr = mtmp->data;
+                } else if (!(resists_ston(mtmp) || defended(mtmp, AD_STON))) {
+                    mtmp->mstone = 5;
+                    mtmp->mstonebyu = FALSE;
+                }
+            } else if (heal) {
+                mtmp->mhp = mtmp->mhpmax;
+            }
+            if (!ptr)
+                return 2; /* it died */
+            }
+        }
+        newsym(mtmp->mx, mtmp->my);
+        return 1;
+    }
+    return 0;
+}
+
 int
 mloot_container(mon, container, vismon)
 struct monst *mon;
@@ -1750,6 +1862,10 @@ boolean vismon;
         return res; /* 0 */
     /* FIXME: handle cursed bag of holding */
     if (Is_mbag(container) && container->cursed)
+        return res; /* 0 */
+    /* levitating/floating monsters can't reach containers
+       on the ground */
+    if (is_floater(mon->data) || can_levitate(mon))
         return res; /* 0 */
 
     switch (rn2(10)) {
@@ -1869,6 +1985,11 @@ register const char *str;
     if (mtmp->isshk && inhishop(mtmp))
         return FALSE;
 
+    /* levitating/floating monsters can't reach the ground, just
+       like levitating players */
+    if (is_floater(mtmp->data) || can_levitate(mtmp))
+        return FALSE;
+
     for (otmp = level.objects[mtmp->mx][mtmp->my]; otmp; otmp = otmp2) {
         otmp2 = otmp->nexthere;
         if (Is_box(otmp) || otmp->otyp == ICE_BOX) {
@@ -1956,7 +2077,8 @@ register const char *str;
             carryamt = can_carry(mtmp, otmp);
             if (carryamt == 0)
                 continue;
-            if (is_pool(mtmp->mx, mtmp->my))
+            if (is_pool(mtmp->mx, mtmp->my)
+                && !is_swimmer(mtmp->data))
                 continue;
             /* handle cases where the critter can only get some */
             otmp3 = otmp;
@@ -2192,12 +2314,14 @@ long flag;
     wantsewage = (mdat == &mons[PM_GIANT_LEECH]);
     wantice = (mdat == &mons[PM_FROST_SALAMANDER]);
     poolok = ((!Is_waterlevel(&u.uz)
-               && (is_flyer(mdat) || is_floater(mdat) || is_clinger(mdat)))
+               && (is_flyer(mdat) || is_floater(mdat)
+                   || is_clinger(mdat) || can_levitate(mon)))
               || ((is_swimmer(mdat) || has_cold_feet(mon)) && !wantpool)
               || can_wwalk(mon));
     /* note: floating eye is the only is_floater() so this could be
        simplified, but then adding another floater would be error prone */
-    lavaok = (is_flyer(mdat) || is_floater(mdat) || is_clinger(mdat)
+    lavaok = (is_flyer(mdat) || is_floater(mdat)
+              || is_clinger(mdat) || can_levitate(mon)
               || ((has_cold_feet(mon) || likes_lava(mdat)) && !wantlava));
     if (mdat == &mons[PM_FLOATING_EYE]) /* prefers to avoid heat */
         lavaok = FALSE;
@@ -2280,7 +2404,7 @@ long flag;
             /* avoid open air if gravity is in effect */
             if (is_open_air(nx, ny)
                 && !(is_flyer(mdat) || is_floater(mdat)
-                     || is_clinger(mdat)))
+                     || is_clinger(mdat) || can_levitate(mon)))
                 continue;
             if ((is_pool(nx, ny) == wantpool || poolok)
                 && (is_lava(nx, ny) == wantlava || lavaok)
@@ -2394,16 +2518,19 @@ long flag;
                         && ttmp->ttyp != VIBRATING_SQUARE
                         && ((!is_pit(ttmp->ttyp) && !is_hole(ttmp->ttyp))
                             || (!is_flyer(mdat) && !is_floater(mdat)
-                                && !is_clinger(mdat)) || Sokoban)
+                                && !is_clinger(mdat) && !can_levitate(mon))
+                            || Sokoban)
                         && (ttmp->ttyp != SLP_GAS_TRAP
                             || !(resists_sleep(mon) || defended(mon, AD_SLEE)))
                         && (ttmp->ttyp != BEAR_TRAP
                             || (mdat->msize > MZ_SMALL && !amorphous(mdat)
                                 && !is_flyer(mdat) && !is_floater(mdat)
-                                && !is_whirly(mdat) && !unsolid(mdat)))
+                                && !is_whirly(mdat) && !unsolid(mdat)
+                                && !can_levitate(mon)))
                         && (ttmp->ttyp != FIRE_TRAP
                             || !(resists_fire(mon) || defended(mon, AD_FIRE)))
-                        && (ttmp->ttyp != SQKY_BOARD || !is_flyer(mdat))
+                        && (ttmp->ttyp != SQKY_BOARD
+                            || !(is_flyer(mdat) || can_levitate(mon)))
                         && (ttmp->ttyp != WEB
                             || (!amorphous(mdat) && !webmaker(mdat)
                                 && !is_whirly(mdat) && !unsolid(mdat)))
@@ -2507,6 +2634,12 @@ struct monst *magr, *mdef;
         && md == &mons[PM_NEOTHELID])
         return ALLOW_M | ALLOW_TM;
 
+    /* In Purgatory, lost souls will fight living
+       players for a chance at redemption */
+    if (In_purgatory(&u.uz)
+        && is_mplayer(ma) && md == &mons[PM_SPECTRE])
+        return ALLOW_M | ALLOW_TM;
+
     return 0;
 }
 
@@ -2588,10 +2721,8 @@ struct monst *magr, /* monster that is currently deciding where to move */
 
     /* berserk monsters sometimes lash out at everything
        when trying to attack you  */
-    if (is_berserker(ma) && m_canseeu(magr)
-        && magr->mpeaceful == FALSE && !rn2(7)
-        && (magr->mhp < (magr->mhpmax / 5))
-        && !noattacks(ma))
+    if (magr->mberserk && !magr->mpeaceful
+        && !rn2(3) && m_canseeu(magr))
         return ALLOW_M | ALLOW_TM;
 
     /* The Riders, and huge/gigantic monsters
@@ -2614,13 +2745,31 @@ struct monst *magr, /* monster that is currently deciding where to move */
 
     /* mindflayer larvae need live humanoids as hosts
        so they can mature into adult flayers */
-    if (ma == &mons[PM_MIND_FLAYER_LARVA] && can_become_flayer(md))
+    if (ma == &mons[PM_MIND_FLAYER_LARVA]
+        && can_become_flayer(md))
         return ALLOW_M | ALLOW_TM;
 
     /* neothelids need brains to survive and
        will attack anything not mindless */
     if (ma == &mons[PM_NEOTHELID]
         && !mindless(md))
+        return ALLOW_M | ALLOW_TM;
+
+    /* mini-me recently had a bad encounter with a yellowjacket.
+       she now hates all things that can sting */
+    if ((ma == &mons[PM_KATHRYN_THE_ICE_QUEEN]
+         || ma == &mons[PM_KATHRYN_THE_ENCHANTRESS])
+        && can_sting(md))
+        return ALLOW_M | ALLOW_TM;
+
+    /* Gollum likes to eat fish, bats, and orcses */
+    if (ma == &mons[PM_GOLLUM]
+        && (md == &mons[PM_PIRANHA]
+            || is_bat(md) || md->mlet == S_ORC))
+        return ALLOW_M | ALLOW_TM;
+
+    /* Pets will attack Lucifer, regardless of their level */
+    if (magr->mtame && md == &mons[PM_LUCIFER])
         return ALLOW_M | ALLOW_TM;
 
     /* now test all two-way aggressions both ways */
@@ -2930,7 +3079,8 @@ struct permonst *mptr; /* reflects mtmp->data _prior_ to mtmp's death */
         separate_steed_and_rider(mtmp);
     if (mtmp->rider_id) {
         struct monst *mtmp2 = get_mon_rider(mtmp);
-        if (mtmp2) free_erid(mtmp2);
+        if (mtmp2)
+            free_erid(mtmp2);
         newsym(mtmp->mx, mtmp->my);
     }
     if (onmap)
@@ -2948,7 +3098,14 @@ struct permonst *mptr; /* reflects mtmp->data _prior_ to mtmp's death */
 
     mtmp->mstate |= MON_DETACH;
     iflags.purge_monsters++;
+
+    /* hero is thrown from his steed when it dies or gets genocided */
+    if (mtmp == u.usteed)
+        dismount_steed(DISMOUNT_GENERIC);
+    return;
 }
+
+
 
 /* find the worn amulet of life saving which will save a monster */
 struct obj *
@@ -3053,6 +3210,14 @@ goblinkingdead()
     if (!u.uevent.ugking)
         u.uevent.ugking = TRUE;
     com_pager(305);
+}
+
+void
+luciferdead()
+{
+    if (!u.uevent.ulucifer)
+        u.uevent.ulucifer = TRUE;
+    com_pager(306);
 }
 
 void
@@ -3234,10 +3399,7 @@ register struct monst *mtmp;
     if (mtmp->isgd && !grddead(mtmp))
         return;
 
-    /* Player is thrown from his steed when it dies */
-    if (mtmp == u.usteed)
-        dismount_steed(DISMOUNT_GENERIC);
-    /* The same is true for monsters riding steeds */
+    /* monster is thrown from its steed when it dies */
     rider = get_mon_rider(mtmp);
     if (rider)
         separate_steed_and_rider(rider);
@@ -3297,13 +3459,16 @@ register struct monst *mtmp;
         vecnadead();
     if (mtmp->isgking)
         goblinkingdead();
+    if (mtmp->islucifer)
+        luciferdead();
     if (tmp == urole.neminum)
         nemdead();
     if (mtmp->data->msound == MS_LEADER)
         leaddead();
-    /* Medusa, Cerberus, and Vecna fall into two livelog categories,
-     * we log one message flagged for both categories, but only for
-     * the first kill. Subsequent kills are not an achievement.
+    /* Medusa, Cerberus, Vecna, and Lucifer fall into two livelog
+     * categories, we log one message flagged for both categories,
+     * but only for the first kill. Subsequent kills are not an
+     * achievement.
      */
     if (mtmp->data == &mons[PM_MEDUSA] && !u.uachieve.killed_medusa) {
         u.uachieve.killed_medusa = 1;
@@ -3317,6 +3482,9 @@ register struct monst *mtmp;
     } else if (mtmp->isgking && !u.uachieve.killed_gking) {
         u.uachieve.killed_gking = 1;
         livelog_write_string(LL_ACHIEVE | LL_UMONST, "killed the Goblin King");
+    } else if (mtmp->islucifer && !u.uachieve.killed_lucifer) {
+        u.uachieve.killed_lucifer = 1;
+        livelog_write_string(LL_ACHIEVE | LL_UMONST, "killed Lucifer");
     } else if (mtmp->data == &mons[PM_DEATH]) {
         switch (mvitals[tmp].died) {
         case 1:
@@ -3369,6 +3537,7 @@ register struct monst *mtmp;
 
     if (glyph_is_invisible(levl[mtmp->mx][mtmp->my].glyph))
         unmap_object(mtmp->mx, mtmp->my);
+
     m_detach(mtmp, mptr);
 }
 
@@ -3406,7 +3575,8 @@ boolean was_swallowed; /* digestion */
 
     /* Trolls don't leave a corpse when the player is wielding Trollsbane */
     if (mdat->mlet == S_TROLL
-        && wielding_artifact(ART_TROLLSBANE)) {
+        && wielding_artifact(ART_TROLLSBANE)
+        && distu(mon->mx, mon->my) < 3) {
         if (cansee(mon->mx, mon->my))
             pline("In the presence of Trollsbane, %s corpse flares brightly and burns to ashes.",
                   s_suffix(mon_nam(mon)));
@@ -3415,7 +3585,8 @@ boolean was_swallowed; /* digestion */
 
     /* Zombies don't leave a corpse when the player is wielding Sunsword */
     if (is_zombie(mdat)
-        && wielding_artifact(ART_SUNSWORD)) {
+        && wielding_artifact(ART_SUNSWORD)
+        && distu(mon->mx, mon->my) < 3) {
         if (cansee(mon->mx, mon->my))
             pline("In the presence of Sunsword, %s corpse dissolves into nothingness.",
                   s_suffix(mon_nam(mon)));
@@ -3505,10 +3676,7 @@ struct monst *mdef;
        his temporary corridor to/from the vault has been removed */
     if (mdef->isgd && !grddead(mdef))
         return;
-    /* hero is thrown from his steed when it disappears */
-    if (mdef == u.usteed)
-        dismount_steed(DISMOUNT_GENERIC);
-    /* The same is true for monsters riding steeds */
+    /* monster is thrown from its steed when it disappears */
     rider = get_mon_rider(mdef);
     if (rider)
         separate_steed_and_rider(rider);
@@ -3626,7 +3794,7 @@ int how;
 
     /* no corpses if digested, disintegrated or withered */
     disintegested = (how == AD_DGST || how == -AD_RBRE
-                     || how == AD_WTHR);
+                     || how == AD_WTHR || how == AD_DISN);
     if (disintegested)
         mondead(mdef);
     else
@@ -3654,8 +3822,9 @@ int how;
     else
         be_sad = (mdef->mtame != 0 && !mdef->msummoned);
 
-    /* no corpses if digested or disintegrated */
-    disintegested = (how == AD_DGST || how == -AD_RBRE);
+    /* no corpses if digested, disintegrated or withered */
+    disintegested = (how == AD_DGST || how == -AD_RBRE
+                     || how == AD_WTHR || how == AD_DISN);
     if (disintegested)
         xkilled(mdef, XKILL_NOCORPSE);
     else
@@ -3710,6 +3879,7 @@ struct monst *mtmp;
 int xkill_flags; /* 1: suppress message, 2: suppress corpse, 4: pacifist */
 {
     int tmp, mndx, x = mtmp->mx, y = mtmp->my;
+    struct monst museum = zeromonst;
     struct permonst *mdat;
     struct obj *otmp;
     struct trap *t;
@@ -3854,8 +4024,16 @@ int xkill_flags; /* 1: suppress message, 2: suppress corpse, 4: pacifist */
             }
         }
     }
-    if (wasinside)
+
+    if (wasinside) {
+        /* spoteffects() can end up clearing the level of monsters; grab a copy */
+        museum = *mtmp;
+        museum.nmon = 0;
+        museum.minvent = 0;
+        museum.mextra = 0;
         spoteffects(TRUE); /* poor man's expels() */
+        mtmp = &museum; /* use the reference copy now */
+    }
     /* monster is gone, corpse or other object might now be visible */
     newsym(x, y);
 
@@ -3979,14 +4157,13 @@ int xkill_flags; /* 1: suppress message, 2: suppress corpse, 4: pacifist */
     /* malign was already adjusted for u.ualign.type and randomization */
     adjalign(mtmp->malign);
 
-    if (is_bones_monster(mtmp->data)
-        && strlen(mtmp->former_rank) > 0) {
-        if (mtmp->data == &mons[PM_GHOST])
-            livelog_printf(LL_UMONST, "destroyed %s, the former %s",
-                           livelog_mon_nam(mtmp), mtmp->former_rank);
-        else
-            livelog_printf(LL_UMONST, "destroyed %s, and former %s",
-                           livelog_mon_nam(mtmp), mtmp->former_rank);
+    if (mtmp->former_rank.mnum != NON_PM) {
+        livelog_printf(LL_UMONST, "destroyed %s, %s former %s",
+                       livelog_mon_nam(mtmp),
+                       (mtmp->data == &mons[PM_GHOST]) ? "the" : "and",
+                       rank_of(mtmp->former_rank.lev,
+                               mtmp->former_rank.mnum,
+                               mtmp->former_rank.female));
     }
 }
 
@@ -4229,7 +4406,7 @@ struct monst *mtmp;
     return;
 }
 
-STATIC_OVL void
+void
 deal_with_overcrowding(mtmp)
 struct monst *mtmp;
 {
@@ -4748,9 +4925,19 @@ xchar x, y;
 {
     struct monst *mtmp;
 
-    if (!OBJ_AT(x, y) && (mtmp = m_at(x, y)) != 0
-        && mtmp->mundetected && hides_under(mtmp->data))
+    if (OBJ_AT(x, y))
+        return;
+    if ((mtmp = m_at(x, y)) == 0
+        && x == u.ux && y == u.uy) {
+        mtmp = &youmonst;
+        /* mtmp->mundetected here isn't synchronized with
+           u.uundetected, we have to use u.uundetected for
+           the hero */
+        if (u.uundetected && hides_under(mtmp->data))
+            (void) hideunder(mtmp);
+    } else if (mtmp && mtmp->mundetected && hides_under(mtmp->data)) {
         (void) hideunder(mtmp);
+    }
 }
 
 /* monster/hero tries to hide under something at the current location */
@@ -5912,13 +6099,13 @@ void
 icequeenrevive(mtmp)
 struct monst *mtmp;
 {
-    /* our hero has freed the Ice Queen from her curse */
-    if (mtmp->data != &mons[PM_KATHRYN_THE_ICE_QUEEN])
-        return;
-
     struct monst *mon;
     struct permonst *bourbon = &mons[PM_BOURBON];
     struct permonst *ozzy = &mons[PM_OZZY];
+
+    /* our hero has freed the Ice Queen from her curse */
+    if (mtmp->data != &mons[PM_KATHRYN_THE_ICE_QUEEN])
+        return;
 
     /* in case player kills themselves while defeating
        the ice queen and isn't lifesaved */

@@ -362,6 +362,7 @@ int x, y, typ;
     boolean oldplace;
     struct trap *ttmp;
     struct rm *lev = &levl[x][y];
+    boolean was_ice = (lev->typ == ICE);
 
     if ((ttmp = t_at(x, y)) != 0) {
         if (undestroyable_trap(ttmp->ttyp))
@@ -519,6 +520,8 @@ int x, y, typ;
                            : level.flags.is_cavernous_lev ? CORR : DOOR;
 
         unearth_objs(x, y);
+        if (was_ice && lev->typ != ICE)
+            spot_stop_timers(x, y, MELT_ICE_AWAY);
         break;
     }
 
@@ -1050,6 +1053,7 @@ unsigned trflags;
     char buf[BUFSZ];
     register int ttype = trap->ttyp;
     struct obj *otmp;
+    struct monst *steed = u.usteed;
     boolean already_seen = trap->tseen,
             forcetrap = ((trflags & FORCETRAP) != 0
                          || (trflags & FAILEDUNTRAP) != 0),
@@ -1381,7 +1385,10 @@ unsigned trflags;
         break;
 
     case PIT:
-    case SPIKED_PIT:
+    case SPIKED_PIT: {
+        /* is the pit an "open grave"? (if it's in a graveyard, yes) */
+        boolean is_grave = (getroomtype(u.ux, u.uy) == MORGUE
+                            && ttype != SPIKED_PIT);
         /* KMH -- You can't escape the Sokoban level traps */
         if (!Sokoban && (Levitation || (Flying && !plunged)))
             break;
@@ -1397,9 +1404,6 @@ unsigned trflags;
             }
             break;
         }
-        /* is the pit an "open grave"? (if it's in a graveyard, yes) */
-        boolean is_grave = (getroomtype(u.ux, u.uy) == MORGUE
-                            && ttype != SPIKED_PIT);
         if (!Sokoban) {
             char verbbuf[BUFSZ];
 
@@ -1501,7 +1505,7 @@ unsigned trflags;
             exercise(A_DEX, FALSE);
         }
         break;
-
+    }
     case HOLE:
     case TRAPDOOR:
         if (!Can_fall_thru(&u.uz)) {
@@ -1792,8 +1796,16 @@ unsigned trflags;
 
     case SPEAR_TRAP:
         feeltrap(trap);
-        pline("A spear shoots up from a hole in the ground at you!");
-        if (Levitation || Flying) {
+        if (u.usteed)
+            pline("A spear shoots up from a hole in the ground at %s!",
+                  mon_nam(steed));
+        else
+            pline("A spear shoots up from a hole in the ground at you!");
+
+        if (u.usteed) {
+            /* trap hits steed instead of you */
+            (void) steedintrap(trap, (struct obj *) 0);
+        } else if (Levitation || Flying) {
             pline("But it isn't long enough to reach you.");
         } else if (thick_skinned(youmonst.data)) {
             pline("But it breaks off against your thick hide.");
@@ -1816,7 +1828,6 @@ unsigned trflags;
             else
                 losehp(Maybe_Half_Phys(rnd(10) + 10), buf, KILLED_BY);
         }
-        (void) steedintrap(trap, (struct obj *) 0);
         break;
 
     case MAGIC_PORTAL:
@@ -1863,6 +1874,7 @@ struct obj *otmp;
 {
     struct monst *steed = u.usteed;
     int tt;
+    int lvl = level_difficulty();
     boolean trapkilled, steedhit;
 
     if (!steed || !trap)
@@ -1908,7 +1920,7 @@ struct obj *otmp;
         steedhit = TRUE;
         break;
     case SPEAR_TRAP:
-        pline("The spear stabs %s%s as well!",
+        pline("The spear stabs %s%s!",
               (is_flyer(steed->data) || Levitation || Flying) ? "at " : "",
               mon_nam(steed));
         if (is_flyer(steed->data) || Levitation || Flying) {
@@ -1919,7 +1931,9 @@ struct obj *otmp;
             deltrap(trap);
             newsym(steed->mx, steed->my);
         } else {
-            trapkilled = thitm(0, steed, (struct obj*) 0, rnd(10) + 10, FALSE);
+            trapkilled = (DEADMONSTER(steed)
+                          || thitm(0, steed, (struct obj*) 0,
+                                   (rnd((lvl < 6) ? 4 : 10) + 10), FALSE));
             steedhit = TRUE;
         }
         break;
@@ -2458,6 +2472,7 @@ register struct monst *mtmp;
     struct permonst *mptr = mtmp->data;
     struct obj *otmp;
     struct monst* mtmp2;
+    int lvl = level_difficulty();
 
     if (!trap) {
         mtmp->mtrapped = 0;      /* perhaps teleported? */
@@ -2759,14 +2774,14 @@ register struct monst *mtmp;
                 if (rn2(2)) {
                     if (in_sight)
                         pline_The("water evaporates!");
-                        levl[mtmp->mx][mtmp->my].typ = ROOM;
+                    levl[mtmp->mx][mtmp->my].typ = ROOM;
                 }
                 if (resists_fire(mtmp) || defended(mtmp, AD_FIRE)) {
                     if (in_sight) {
                         shieldeff(mtmp->mx, mtmp->my);
                         pline("%s is uninjured.", Monnam(mtmp));
                     }
-                } else if (thitm(0, mtmp, (struct obj *)0, rnd(3), FALSE))
+                } else if (thitm(0, mtmp, (struct obj *) 0, rnd(3), FALSE))
                            trapkilled = TRUE;
                 if (see_it)
                     seetrap(trap);
@@ -2834,7 +2849,7 @@ register struct monst *mtmp;
         case PIT:
         case SPIKED_PIT:
             fallverb = "falls";
-            if (is_flyer(mptr) || is_floater(mptr)
+            if (is_flyer(mptr) || is_floater(mptr) || can_levitate(mtmp)
                 || (mtmp->wormno && count_wsegs(mtmp) > 5)
                 || is_clinger(mptr)) {
                 if (force_mintrap && !Sokoban) {
@@ -2871,7 +2886,8 @@ register struct monst *mtmp;
                            defsyms[trap_to_defsym(tt)].explanation);
                 break; /* don't activate it after all */
             }
-            if (is_flyer(mptr) || is_floater(mptr) || mptr == &mons[PM_WUMPUS]
+            if (is_flyer(mptr) || is_floater(mptr) || can_levitate(mtmp)
+                || mptr == &mons[PM_WUMPUS]
                 || (mtmp->wormno && count_wsegs(mtmp) > 5)
                 || mptr->msize >= MZ_HUGE) {
                 if (force_mintrap && !Sokoban) {
@@ -3128,7 +3144,9 @@ register struct monst *mtmp;
                 if (in_sight)
                     pline("It passes right through %s!", mon_nam(mtmp));
             } else {
-                if (thitm(0, mtmp, (struct obj *) 0, rnd(10) + 10, FALSE))
+                if (DEADMONSTER(mtmp)
+                    || thitm(0, mtmp, (struct obj *) 0,
+                             (rnd((lvl < 6) ? 4 : 10) + 10), FALSE))
                     trapkilled = TRUE;
                 else if (in_sight)
                     pline("%s is skewered!", Monnam(mtmp));
@@ -3161,7 +3179,9 @@ register struct monst *mtmp;
                     char buf[BUFSZ], *p, *monnm = mon_nam(mtmp);
 
                     if (nolimbs(mtmp->data)
-                        || is_floater(mtmp->data) || is_flyer(mtmp->data)) {
+                        || is_floater(mtmp->data)
+                        || is_flyer(mtmp->data)
+                        || can_levitate(mtmp)) {
                         /* just "beneath <mon>" */
                         Strcpy(buf, monnm);
                     } else {
@@ -3338,7 +3358,8 @@ float_up()
     } else {
         You("start to float in the air!");
     }
-    if (u.usteed && !is_floater(u.usteed->data) && !is_flyer(u.usteed->data)) {
+    if (u.usteed && !is_floater(u.usteed->data) && !is_flyer(u.usteed->data)
+        && !can_levitate(u.usteed)) {
         if (Lev_at_will) {
             pline("%s magically floats up!", Monnam(u.usteed));
         } else {
@@ -3472,7 +3493,8 @@ long hmask, emask; /* might cancel timeout */
             You_feel("heavier.");
         } else if (is_open_air(u.ux, u.uy)
             && !(u.usteed && (is_floater(u.usteed->data)
-                              || is_flyer(u.usteed->data)))) {
+                              || is_flyer(u.usteed->data)
+                              || can_levitate(u.usteed)))) {
             if (!Flying) {
                 You("are no longer flying.");
                 You("plummet several thousand feet to your death.");
@@ -3499,7 +3521,8 @@ long hmask, emask; /* might cancel timeout */
                         dismount_steed(DISMOUNT_FELL);
                     selftouch("As you fall, you");
                 } else if (u.usteed && (is_floater(u.usteed->data)
-                                        || is_flyer(u.usteed->data))) {
+                                        || is_flyer(u.usteed->data)
+                                        || can_levitate(u.usteed))) {
                     You("settle more firmly in the saddle.");
                 } else if (Hallucination) {
                     pline("Bummer!  You've %s.",
@@ -3972,11 +3995,16 @@ lava_damage(obj, x, y)
 struct obj *obj;
 xchar x, y;
 {
-    int otyp = obj->otyp, ocls = obj->oclass;
+    int otyp = obj->otyp, ocls = obj->oclass,
+        oart = obj->oartifact;
 
     /* the Amulet, invocation items, and Rider corpses are never destroyed
        (let Book of the Dead fall through to fire_damage() to get feedback) */
     if (obj_resists(obj, 0, 0) && otyp != SPE_BOOK_OF_THE_DEAD)
+        return FALSE;
+    /* the artifacts that generate when Vecna is destroyed are never
+       destroyed by lava */
+    if (oart == ART_EYE_OF_VECNA || oart == ART_HAND_OF_VECNA)
         return FALSE;
     /* destroy liquid (venom), wax, veggy, flesh, paper (except for scrolls
        and books--let fire damage deal with them), cloth, leather, wood, bone
@@ -4087,6 +4115,7 @@ xchar x, y;
 {
     struct obj *otmp, *ncobj;
     int in_sight = !Blind && couldsee(x, y); /* Don't care if it's lit */
+    boolean in_invent = obj && carried(obj), described = FALSE;
 
     if (!obj)
         return ER_NOTHING;
@@ -4097,7 +4126,6 @@ xchar x, y;
     if (!ostr)
         ostr = cxname(obj);
 
-    boolean ucarried = carried(obj);
     if (obj->otyp == CAN_OF_GREASE && obj->spe > 0) {
         return ER_NOTHING;
     } else if (obj->otyp == TOWEL && obj->spe < 7) {
@@ -4107,20 +4135,27 @@ xchar x, y;
         wet_a_towel(obj, -rnd(7 - obj->spe), TRUE);
         return ER_NOTHING;
     } else if (obj->greased) {
-        if (!rn2(2))
+        if (!rn2(2)) {
             obj->greased = 0;
-        if (ucarried)
-            update_inventory();
+            if (in_invent) {
+                pline_The("grease on %s washes off.", yname(obj));
+                described = TRUE; /* used to modify potion feedback */
+                update_inventory();
+            }
+            /* ungreased potions of acid will always be destroyed by water */
+            if (obj->otyp == POT_ACID)
+                goto pot_acid;
+        }
         return ER_GREASED;
     } else if (Is_container(obj)
                && (!Waterproof_container(obj) || (obj->cursed && !rn2(3)))) {
-        if (ucarried)
+        if (in_invent)
             pline("Some water gets into your %s!", ostr);
 
         water_damage_chain(obj->cobj, FALSE, 0, TRUE, x, y);
         return ER_DAMAGED; /* contents were damaged */
     } else if (Waterproof_container(obj)) {
-        if (carried(obj)) {
+        if (in_invent) {
             pline_The("water slides right off your %s.", ostr);
             makeknown(obj->otyp);
         }
@@ -4150,7 +4185,7 @@ xchar x, y;
             }
             setnotworn(obj);
             delobj(obj);
-            if (ucarried)
+            if (in_invent)
                 update_inventory();
             return ER_DESTROYED;
         }
@@ -4167,13 +4202,13 @@ xchar x, y;
             || obj->otyp == SCR_MAIL
 #endif
            ) return 0;
-        if (ucarried)
+        if (in_invent)
             pline("Your %s %s.", ostr, vtense(ostr, "fade"));
 
         obj->otyp = SCR_BLANK_PAPER;
         obj->dknown = 0;
         obj->spe = 0;
-        if (ucarried)
+        if (in_invent)
             update_inventory();
         return ER_DAMAGED;
     } else if (obj->oclass == SPBOOK_CLASS) {
@@ -4183,7 +4218,7 @@ xchar x, y;
         } else if (obj->otyp == SPE_BLANK_PAPER) {
             return 0;
         }
-        if (ucarried)
+        if (in_invent)
             pline("Your %s %s.", ostr, vtense(ostr, "fade"));
 
         if (obj->otyp == SPE_NOVEL) {
@@ -4192,37 +4227,54 @@ xchar x, y;
         }
 
         obj->otyp = SPE_BLANK_PAPER;
+        /* same re-init as over-reading or polymorph; matters if it gets
+           polymorphed into non-blank; doesn't matter if eventually written
+           on since that replaces it with new book and studied count of 0 */
+        if (obj->spestudied)
+            obj->spestudied = rn2(obj->spestudied);
         set_material(obj, PAPER); /* in case it was one of the LEATHER books */
         obj->dknown = 0;
-        if (ucarried)
+        if (in_invent)
             update_inventory();
         return ER_DAMAGED;
     } else if (obj->oclass == POTION_CLASS) {
         if (obj->otyp == POT_ACID) {
             char *bufp;
-            boolean one = (obj->quan == 1L), update = carried(obj),
-                    exploded = FALSE;
+            boolean one, exploded;
 
-            if (Blind && !ucarried)
+ pot_acid:
+            one = (obj->quan == 1L);
+            exploded = FALSE;
+
+            if (Blind && !in_invent)
                 obj->dknown = 0;
             if (acid_ctx.ctx_valid)
                 exploded = ((obj->dknown ? acid_ctx.dkn_boom
                                          : acid_ctx.unk_boom) > 0);
-            /* First message is
-             * "a [potion|<color> potion|potion of acid] explodes"
-             * depending on obj->dknown (potion has been seen) and
-             * objects[POT_ACID].oc_name_known (fully discovered),
-             * or "some {plural version} explode" when relevant.
-             * Second and subsequent messages for same chain and
-             * matching dknown status are
-             * "another [potion|<color> &c] explodes" or plural
-             * variant.
-             */
-            bufp = simpleonames(obj);
-            pline("%s %s %s!", /* "A potion explodes!" */
-                  !exploded ? (one ? "A" : "Some")
-                            : (one ? "Another" : "More"),
+            if (described) {
+                /* just gave "The grease washes off your potion of acid."
+                   or "...your <color> potion." (or just "...your potion.");
+                   don't re-describe potion here; if we used "It explodes!"
+                   then "it" might be misconstrued as applying to "grease" */
+                pline_The("potion%s %s!",
+                          plur(obj->quan), otense(obj, "explode"));
+            } else {
+                /* First message is
+                 * "a [potion|<color> potion|potion of acid] explodes"
+                 * depending on obj->dknown (potion has been seen) and
+                 * objects[POT_ACID].oc_name_known (fully discovered),
+                 * or "some {plural version} explode" when relevant.
+                 * Second and subsequent messages for same chain and
+                 * matching dknown status are
+                 * "another [potion|<color> &c] explodes" or plural
+                 * variant.
+                 */
+                bufp = simpleonames(obj);
+                pline("%s%s %s!", /* "A potion explodes!" */
+                      !exploded ? (one ? "A " : "Some ")
+                                : (one ? "Another " : "More "),
                   bufp, vtense(bufp, "explode"));
+            }
             if (acid_ctx.ctx_valid) {
                 if (obj->dknown)
                     acid_ctx.dkn_boom++;
@@ -4231,31 +4283,31 @@ xchar x, y;
             }
             setnotworn(obj);
             delobj(obj);
-            if (update)
+            if (in_invent)
                 update_inventory();
             return ER_DESTROYED;
         } else if (obj->odiluted) {
-            if (ucarried)
+            if (in_invent)
                 pline("Your %s %s further.", ostr, vtense(ostr, "dilute"));
 
             obj->otyp = POT_WATER;
             obj->dknown = 0;
             obj->blessed = obj->cursed = 0;
             obj->odiluted = 0;
-            if (ucarried)
+            if (in_invent)
                 update_inventory();
             return ER_DAMAGED;
         } else if (obj->otyp != POT_WATER) {
-            if (ucarried)
+            if (in_invent)
                 pline("Your %s %s.", ostr, vtense(ostr, "dilute"));
 
             obj->odiluted++;
-            if (ucarried)
+            if (in_invent)
                 update_inventory();
             return ER_DAMAGED;
         } else if (obj->otyp == HEAVY_IRON_BALL
                    || obj->otyp == IRON_CHAIN) {
-            if (ucarried)
+            if (in_invent)
                 update_inventory();
             return ER_DAMAGED;
         }
@@ -4472,7 +4524,12 @@ drown()
         }
         vision_recalc(2); /* unsee old position */
         u.uinwater = 1;
-        under_water(1);
+        if (!See_underwater) {
+            under_water(1);
+        } else {
+            vision_reset();
+            docrt();
+        }
         vision_full_recalc = 1;
         return FALSE;
     }
@@ -6305,19 +6362,13 @@ lava_effects()
         iflags.in_lava_effects--;
 
         /* s/he died... */
-        boil_away = (u.umonnum == PM_WATER_ELEMENTAL
-                     || u.umonnum == PM_STEAM_VORTEX
-                     || u.umonnum == PM_WATER_TROLL
-                     || u.umonnum == PM_BABY_SEA_DRAGON
-                     || u.umonnum == PM_SEA_DRAGON
-                     || u.umonnum == PM_FOG_CLOUD);
         for (;;) {
             u.uhp = -1;
             /* killer format and name are reconstructed every iteration
                because lifesaving resets them */
             killer.format = KILLED_BY;
             Strcpy(killer.name, lava_killer);
-            You("%s...", boil_away ? "boil away" : "burn to a crisp");
+            You("%s...", on_fire(&youmonst, ON_FIRE_DEAD));
             done(BURNING);
             if (safe_teleds(TELEDS_ALLOW_DRAG | TELEDS_TELEPORT))
                 break; /* successful life-save */

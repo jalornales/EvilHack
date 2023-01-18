@@ -941,6 +941,29 @@ wiz_map(VOID_ARGS)
     return 0;
 }
 
+/* ^S command - cast any spell. */
+STATIC_PTR int
+wiz_spell(VOID_ARGS)
+{
+    char buf[BUFSZ] = DUMMY;
+    int last_spbook, i;
+    while (buf[0] == '\0' || buf[0] == '\033') {
+        getlin("What spell do you successfully cast without energy use?", buf);
+        (void) mungspaces(buf);
+    }
+    last_spbook = (SPBOOK_CLASS + 1 < MAXOCLASSES ? bases[SPBOOK_CLASS + 1] : NUM_OBJECTS) - 1;
+    for (i = bases[SPBOOK_CLASS]; i <= last_spbook; ++i) {
+        if (objects[i].oc_skill < P_FIRST_SPELL || objects[i].oc_skill > P_LAST_SPELL)
+            continue;
+        if (!strcmpi(buf, OBJ_NAME(objects[i]))) {
+            /* pline("Casting [%d] %s", i, buf); */
+            return spelleffects(i, FALSE, TRUE);
+        }
+    }
+    pline("There is no such spell.");
+    return 0;
+}
+
 /* ^G command - generate monster(s); a count prefix will be honored */
 STATIC_PTR int
 wiz_genesis(VOID_ARGS)
@@ -1349,6 +1372,8 @@ wiz_map_levltyp(VOID_ARGS)
                 Strcat(dsc, " Vecna's branch");
             if (slev->flags.gtown)
                 Strcat(dsc, " Goblin Town");
+            if (slev->flags.purg)
+                Strcat(dsc, " Purgatory");
             if (slev->flags.town)
                 Strcat(dsc, " town");
             if (slev->flags.rogue_like)
@@ -1962,6 +1987,65 @@ char resultbuf[]; /* should be at least [7] to hold "18/100\0" */
     return resultbuf;
 }
 
+/* format urealtime.realtime as
+      " D days, H hours, M minutes and S seconds"
+   with any fields having a value of 0 omitted:
+      0-00:00:20 => " 20 seconds"
+      0-00:15:05 => " 15 minutes and 5 seconds"
+      0-00:16:00 => " 16 minutes"
+      0-01:15:10 => " 1 hour, 15 minutes and 10 seconds"
+      0-02:00:01 => " 2 hours and 1 second"
+      3-00:25:40 => " 3 days, 25 minutes and 40 seconds"
+   (note: for a list of more than two entries, nethack usually includes the
+   [style-wise] optional comma before "and" but in this instance it does not)
+ */
+static char *
+fmt_elapsed_time(char *outbuf, int final)
+{
+    int fieldcnt;
+    long edays, ehours, eminutes, eseconds;
+    /* for a game that's over, reallydone() has updated urealtime.realtime
+       to its final value before calling us during end of game disclosure;
+       for a game that's still in progress, it holds the amount of elapsed
+       game time from previous sessions up through most recent save/restore
+       (or up through latest level change when 'checkpoint' is On);
+       '.start_timing' has a non-zero value even if '.realtime' is 0 */
+    long etim = urealtime.realtime;
+
+    if (!final)
+        etim += getnow() - urealtime.start_timing;
+    /* we could use localtime() to convert the value into a 'struct tm'
+       to get date and time fields but this is simple and straightforward */
+    eseconds = etim % 60L, etim /= 60L;
+    eminutes = etim % 60L, etim /= 60L;
+    ehours = etim % 24L;
+    edays = etim / 24L;
+    fieldcnt = !!edays + !!ehours + !!eminutes + !!eseconds;
+
+    Strcpy(outbuf, fieldcnt ? "" : " none"); /* 'none' should never happen */
+    if (edays) {
+        Sprintf(eos(outbuf), " %ld day%s", edays, plur(edays));
+        if (fieldcnt > 1) /* hours and/or minutes and/or seconds to follow */
+            Strcat(outbuf, (fieldcnt == 2) ? " and" : ",");
+        --fieldcnt; /* edays has been processed */
+    }
+    if (ehours) {
+        Sprintf(eos(outbuf), " %ld hour%s", ehours, plur(ehours));
+        if (fieldcnt > 1) /* minutes and/or seconds to follow */
+            Strcat(outbuf, (fieldcnt == 2) ? " and" : ",");
+        --fieldcnt; /* ehours has been processed */
+    }
+    if (eminutes) {
+        Sprintf(eos(outbuf), " %ld minute%s", eminutes, plur(eminutes));
+        if (fieldcnt > 1) /* seconds to follow */
+            Strcat(outbuf, " and");
+        /* eminutes has been processed but no need to decrement fieldcnt */
+    }
+    if (eseconds)
+        Sprintf(eos(outbuf), " %ld second%s", eseconds, plur(eseconds));
+    return outbuf;
+}
+
 void
 enlightenment(mode, final)
 int mode;  /* BASICENLIGHTENMENT | MAGICENLIGHTENMENT (| both) */
@@ -2284,6 +2368,9 @@ int final;
         enl_msg("Your score ", "is ", "was ", buf, "");
     }
 #endif
+
+    (void) fmt_elapsed_time(buf, final);
+    enl_msg("You ", "have been playing for", "played for", buf, "");
 }
 
 /* hit points, energy points, armor class -- essential information which
@@ -3006,6 +3093,7 @@ int final;
         " if surroundings permitted";
     int ltmp, armpro;
     char buf[BUFSZ];
+    register struct obj *otmp;
 
     /*\
      *  Attributes
@@ -3079,6 +3167,8 @@ int final;
         you_are("immune to sickness", from_what(SICK_RES));
     if (Stone_resistance)
         you_are("petrification resistant", from_what(STONE_RES));
+    if (Death_resistance)
+        you_are("immune to the effects of death magic", from_what(DEATH_RES));
     if (Halluc_resistance)
         enl_msg(You_, "resist", "resisted", " hallucinations",
                 from_what(HALLUC_RES));
@@ -3108,32 +3198,26 @@ int final;
     if (Warning)
         you_are("warned", from_what(WARNING));
 
-    if (Warn_of_mon && (context.warntype.obj & MH_ORC))
-        you_are("aware of the presence of orcs", from_what(WARN_OF_MON));
-    if (Warn_of_mon && (context.warntype.obj & MH_ELF))
-        you_are("aware of the presence of elves because of Grimtooth", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_UNDEAD))
-        you_are("aware of the presence of the undead because of Sunsword", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_GIANT))
-        you_are("aware of the presence of giants because of Giantslayer", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_WERE))
-        you_are("aware of the presence of werecreatures because of Werebane", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_DRAGON))
-        you_are("aware of the presence of dragons because of Dragonbane", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_OGRE))
-        you_are("aware of the presence of ogres because of Ogresmasher", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_TROLL))
-        you_are("aware of the presence of trolls because of Trollsbane", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_DEMON)
-        && (uwep->oartifact == ART_DEMONBANE || (u.twoweap && uswapwep->oartifact == ART_DEMONBANE)))
-        you_are("aware of the presence of demons because of Demonbane", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_DEMON)
-        && (uwep->oartifact == ART_DRAMBORLEG || (u.twoweap && uswapwep->oartifact == ART_DRAMBORLEG)))
-        you_are("aware of the presence of demons because of Dramborleg", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_ANGEL))
-        you_are("aware of the presence of angels because of Angelslayer", "");
-    if (Warn_of_mon && (context.warntype.obj & MH_JABBERWOCK))
-        you_are("aware of the presence of jabberwocks because of Vorpal Blade", "");
+    /* Need to walk all potential in-use artifacts that glow on warning since
+     * it is possible to have multiple artifacts that warn of the same monster type
+     * as well as artifacts that warn of multiple monster types. */
+    if (Warn_of_mon) {
+        for (otmp = invent; otmp; otmp = otmp->nobj) {
+            if (((otmp->owornmask & (W_ARMOR | W_ACCESSORY | W_WEP))
+                    || (u.twoweap && (otmp->owornmask & W_SWAPWEP)))
+                && has_glow_warning(otmp)) {
+                int i;
+                for (i = 0; i < 32; i++) {
+                    /* Artifacts let you know they are responsible even in non-Wizard mode. */
+                    if (has_glow_warning(otmp) & (1 << i)) {
+                        Sprintf(buf, "aware of the presence of %s because of ",
+                            makeplural(mon_race_name(i)));
+                        you_are(buf, bare_artifactname(otmp));
+                    }
+                }
+            }
+        }
+    }
 
     if (Warn_of_mon && context.warntype.polyd) {
         Sprintf(buf, "aware of the presence of %s",
@@ -3180,9 +3264,7 @@ int final;
         you_are("clairvoyant", from_what(CLAIRVOYANT));
     else if ((HClairvoyant || EClairvoyant) && BClairvoyant) {
         Strcpy(buf, from_what(-CLAIRVOYANT));
-        if (!strncmp(buf, " because of ", 12))
-            /* overwrite substring; strncpy doesn't add terminator */
-            (void) strncpy(buf, " if not for ", 12);
+        (void) strsubst(buf, " because of ", " if not for ");
         enl_msg(You_, "could be", "could have been", " clairvoyant", buf);
     }
     if (Infravision)
@@ -3293,7 +3375,9 @@ int final;
     if (Breathless)
         you_can("survive without air", from_what(MAGICAL_BREATHING));
     else if (Amphibious)
-        you_can("breathe water", from_what(MAGICAL_BREATHING));
+        you_can("breathe water",
+                amphibious(youmonst.data) ? " from current creature form"
+                                          : from_what(MAGICAL_BREATHING));
     if (Passes_walls)
         you_can("walk through walls", from_what(PASSES_WALLS));
 
@@ -3306,8 +3390,6 @@ int final;
         you_have("slower digestion", from_what(SLOW_DIGESTION));
     if (inediate(raceptr(&youmonst)))
         you_can("survive without having to eat", "");
-    if (immune_death_magic(raceptr(&youmonst)))
-        you_are("immune to the effects of death magic", "");
     if (u.uhitinc)
         you_have(enlght_combatinc("to hit", u.uhitinc, final, buf), "");
     if (u.udaminc)
@@ -3401,7 +3483,10 @@ int final;
     }
     /* movement and non-armor-based protection */
     if (Fast)
-        you_are(Very_fast ? "very fast" : "fast", from_what(FAST));
+        you_are(Very_fast ? "very fast" : "fast",
+                (Underwater && is_fast_underwater(youmonst.data))
+                    ? " from current creature form"
+                    : from_what(FAST));
     if (Slow)
         you_are("slow", from_what(SLOW));
     if (Reflecting)
@@ -3816,6 +3901,9 @@ int final;
     if (u.uachieve.killed_gking)
         enl_msg(You_, "have ", "",
                 "defeated the Goblin King", ""), ++acnt;
+    if (u.uachieve.killed_lucifer)
+        enl_msg(You_, "have ", "",
+                "defeated Lucifer", ""), ++acnt;
     if (u.uachieve.defeat_icequeen)
         enl_msg(You_, "have ", "",
                 "defeated Kathryn the Ice Queen", ""), ++acnt;
@@ -3825,6 +3913,9 @@ int final;
     if (u.uachieve.enter_gehennom)
         enl_msg(You_, "have ", "",
                 "entered Gehennom", ""), ++acnt;
+    if (u.uachieve.enter_purgatory)
+        enl_msg(You_, "have ", "",
+                "entered Purgatory", ""), ++acnt;
     if (u.uachieve.menorah)
         enl_msg(You_, "have ", "",
                 "handled the Candelabrum of Invocation", ""), ++acnt;
@@ -4052,6 +4143,8 @@ struct ext_func_tab extcmdlist[] = {
             wiz_rumor_check, IFBURIED | AUTOCOMPLETE | WIZMODECMD },
     { '\0', "wizsmell", "smell monster",
             wiz_smell, IFBURIED | AUTOCOMPLETE | WIZMODECMD },
+    { C('s'), "wizspell", "cast a spell",
+            wiz_spell, IFBURIED | AUTOCOMPLETE | WIZMODECMD },
     { '\0', "wiztelekinesis", "telekinesis",
             wiz_telekinesis, IFBURIED | AUTOCOMPLETE | WIZMODECMD },
     { '\0', "wizwhere", "show locations of special levels",
@@ -6028,10 +6121,11 @@ boolean doit;
     if (IS_FORGE(typ)) {
         add_herecmd_menuitem(win, dodrink, "Really drink the lava from the forge?");
     }
-    if (IS_FOUNTAIN(typ) || IS_FORGE(typ))
+    if (IS_FOUNTAIN(typ) || IS_FORGE(typ)) {
         Sprintf(buf, "Dip something into the %s",
                 defsyms[IS_FOUNTAIN(typ) ? S_fountain : S_forge].explanation);
         add_herecmd_menuitem(win, dodip, buf);
+    }
     if (IS_FORGE(typ)) {
         Sprintf(buf, "Combine objects in the %s",
                 defsyms[S_forge].explanation);

@@ -10,7 +10,7 @@ STATIC_DCL boolean FDECL(known_hitum, (struct monst *, struct obj *, int *,
                                        int, int, struct attack *, int));
 STATIC_DCL boolean FDECL(theft_petrifies, (struct obj *));
 STATIC_DCL void FDECL(steal_it, (struct monst *, struct attack *));
-STATIC_DCL boolean FDECL(really_steal, (struct obj *, struct monst *));
+STATIC_DCL struct obj *FDECL(really_steal, (struct obj *, struct monst *));
 STATIC_DCL boolean FDECL(hitum_cleave, (struct monst *, struct attack *));
 STATIC_DCL boolean FDECL(hitum, (struct monst *, struct attack *));
 STATIC_DCL boolean FDECL(hmon_hitmon, (struct monst *, struct obj *, int,
@@ -20,7 +20,7 @@ void NDECL(demonpet);
 STATIC_DCL void FDECL(start_engulf, (struct monst *));
 STATIC_DCL void NDECL(end_engulf);
 STATIC_DCL int FDECL(gulpum, (struct monst *, struct attack *));
-STATIC_DCL boolean FDECL(hmonas, (struct monst *, int, boolean));
+STATIC_DCL boolean FDECL(hmonas, (struct monst *, int, BOOLEAN_P));
 STATIC_DCL void FDECL(nohandglow, (struct monst *));
 STATIC_DCL boolean FDECL(shade_aware, (struct obj *));
 
@@ -31,6 +31,7 @@ extern boolean notonhead; /* for long worms */
 static boolean override_confirmation = FALSE;
 
 #define PROJECTILE(obj) ((obj) && is_ammo(obj))
+#define KILL_FAMILIARITY 20
 
 void
 erode_armor(mdef, hurt)
@@ -271,6 +272,8 @@ int *attk_count, *role_roll_penalty;
 
     *role_roll_penalty = 0; /* default is `none' */
 
+    /* luck still plays a role with to-hit calculations, but
+       it's toned down vs regular NetHack */
     tmp = 1 + (Luck / 3) + abon() + find_mac(mtmp) + u.uhitinc
           + maybe_polyd(youmonst.data->mlevel, (u.ulevel > 20 ? 20 : u.ulevel));
 
@@ -386,6 +389,7 @@ attack(mtmp)
 register struct monst *mtmp;
 {
     register struct permonst *mdat = mtmp->data;
+    size_t maxweight;
 
     /* This section of code provides protection against accidentally
      * hitting peaceful (like '@') and tame (like 'd') monsters.
@@ -469,6 +473,59 @@ register struct monst *mtmp;
 
     if (u.twoweap && !can_twoweapon())
         untwoweapon();
+
+    /* feedback for twoweaponing w/ offhand weapon
+       being too heavy */
+    maxweight = 0;
+    switch (P_SKILL(P_TWO_WEAPON_COMBAT)) {
+    case P_ISRESTRICTED:
+    case P_UNSKILLED:
+        maxweight = 20; /* can use tridents/javelins,
+                           crysknives, unicorn horns or
+                           anything lighter */
+        break;
+    case P_BASIC:
+        maxweight = 30; /* can use short swords/spears or
+                           a mace */
+        break;
+    case P_SKILLED:
+        maxweight = 40; /* can use sabers/long swords */
+        break;
+    case P_EXPERT:
+        maxweight = 70; /* expert level can offhand any
+                           one-handed weapon */
+        break;
+    }
+
+    if ((uarmg && uarmg->otyp == GAUNTLETS_OF_POWER)
+        || (uarmg && uarmg->oartifact == ART_HAND_OF_VECNA)
+        || maybe_polyd(is_giant(youmonst.data), Race_if(PM_GIANT)))
+        maxweight = 200;
+
+    if (u.twoweap && uswapwep && uswapwep->owt > maxweight) {
+        Your("%s seem%s very %s.",
+             xname(uswapwep), uswapwep->quan == 1 ? "s" : "",
+             rn2(2) ? "unwieldy" : "cumbersome");
+        if (!rn2(10))
+            Your("%s %s too heavy to effectively fight offhand with.",
+                 xname(uswapwep), uswapwep->quan == 1 ? "is" : "are");
+    }
+
+    /* feedback for priests using non-blunt weapons */
+    if (uwep && Role_if(PM_PRIEST)
+        && (uwep->oclass == WEAPON_CLASS || is_weptool(uwep))
+        && (is_pierce(uwep) || is_slash(uwep) || is_ammo(uwep))) {
+        if (!rn2(4))
+            pline("%s has %s you from using %s weapons such as %s!",
+                  align_gname(u.ualign.type), rn2(2) ? "forbidden" : "prohibited",
+                  is_slash(uwep) ? "edged" : "piercing", ansimpleoname(uwep));
+        exercise(A_WIS, FALSE);
+        if (!rn2(10)) {
+            Your("behavior has displeased %s.",
+                 align_gname(u.ualign.type));
+            adjalign(-1);
+        }
+    }
 
     if (unweapon) {
         unweapon = FALSE;
@@ -1074,6 +1131,9 @@ int dieroll;
                         tmp += rnd(u.ulevel / 2) + 1;
                     else
                         tmp += rnd(u.ulevel);
+                    /* significant bonus if wielding Shadowblade in primary hand */
+                    if (obj == uwep && obj->oartifact == ART_SHADOWBLADE)
+                        tmp += (u.ulevel / 2) + 1;
                     hittxt = TRUE;
                 } else if (obj == uwep && obj->oclass == WEAPON_CLASS
                            && ((dieroll == 2 && (bimanual(obj) || (Race_if(PM_GIANT))
@@ -1151,8 +1211,14 @@ int dieroll;
                     && (is_ammo(obj) || is_missile(obj))) {
                     if (ammo_and_launcher(obj, uwep)) {
                         /* Slings hit giants harder (as Goliath) */
-                        if ((uwep->otyp == SLING) && is_giant(mdat))
+                        if ((uwep->otyp == SLING) && racial_giant(mon))
                             tmp *= 2;
+                        /* The Longbow of Diana and the Crossbow of Carl
+                           impart a damage bonus to the ammo fired from
+                           them */
+                        if (uwep->oartifact == ART_LONGBOW_OF_DIANA
+                            || uwep->oartifact == ART_CROSSBOW_OF_CARL)
+                            tmp += rnd(6);
                         /* Elves and Samurai do extra damage using
                          * their bows&arrows; they're highly trained.
                          */
@@ -1164,15 +1230,17 @@ int dieroll;
                             tmp++;
                     }
                 }
+                if (obj->opoisoned && is_poisonable(obj))
+                    ispoisoned = TRUE;
+
                 /* maybe break your glass weapon or monster's glass armor; put
                  * this at the end so that other stuff doesn't have to check obj
                  * && obj->whatever all the time */
                 if (hand_to_hand) {
-                    break_glass_obj(obj);
+                    if (break_glass_obj(obj))
+                        obj = (struct obj *) 0;
                     break_glass_obj(some_armor(mon));
                 }
-                if (obj->opoisoned && is_poisonable(obj))
-                    ispoisoned = TRUE;
             }
         } else if (obj->oclass == POTION_CLASS) {
             if (obj->quan > 1L)
@@ -1456,6 +1524,13 @@ int dieroll;
             || mdat == &mons[PM_ALHOON]))
         tmp *= 2;
 
+    /* if lawful, trained in martial arts, and wearing the
+       Gauntlets of Purity, get a damage bonus when attacking
+       unarmed */
+    if (!uwep && P_SKILL(P_MARTIAL_ARTS) && u.ualign.type == A_LAWFUL
+        && uarmg && uarmg->oartifact == ART_GAUNTLETS_OF_PURITY)
+        tmp += rnd(4) + 2;
+
     if (valid_weapon_attack) {
         struct obj *wep;
 
@@ -1503,7 +1578,7 @@ int dieroll;
             hittxt = shade_miss(&youmonst, mon, obj, FALSE, TRUE);
     }
 
-    if (jousting) {
+    if (jousting && !unsolid(mdat)) {
         joustdmg = 5 + (u.ulevel / 3);
         tmp += d(2, (obj == uwep) ? joustdmg : 2); /* [was in dmgval()] */
         You("joust %s%s", mon_nam(mon), canseemon(mon) ? exclam(tmp) : ".");
@@ -1523,11 +1598,11 @@ int dieroll;
     } else if (unarmed && tmp > 1 && !thrown && !obj && !Upolyd && !thievery) {
         /* VERY small chance of stunning or confusing opponent if unarmed. */
         if (rnd(Race_if(PM_GIANT) ? 40 : 100) < P_SKILL(P_BARE_HANDED_COMBAT)
-            && !biggermonst(mdat) && !thick_skinned(mdat)) {
+            && !biggermonst(mdat) && !thick_skinned(mdat) && !unsolid(mdat)) {
             if (rn2(2)) {
                 if (canspotmon(mon))
                     pline("%s %s from your powerful strike!", Monnam(mon),
-                          makeplural(stagger(mon->data, "stagger")));
+                          makeplural(stagger(mdat, "stagger")));
                 if (mhurtle_to_doom(mon, tmp, &mdat, FALSE))
                     already_killed = TRUE;
             } else if (!mindless(mon->data)) {
@@ -1704,6 +1779,22 @@ int dieroll;
             whom = strcat(s_suffix(whom), " flesh");
         pline(fmt, whom);
     }
+    /* Weapons have a chance to id after a certain number of kills with
+       them. The more powerful a weapon, the lower this chance is. This
+       way, there is uncertainty about when a weapon will ID, but spoiled
+       players can make an educated guess. */
+    if (destroyed && (obj == uwep) && uwep
+        && (uwep->oclass == WEAPON_CLASS || is_weptool(uwep))
+        && !uwep->known) {
+        uwep->wep_kills++;
+        if (uwep->wep_kills > KILL_FAMILIARITY
+            && !rn2(max(2, uwep->spe) && !uwep->known)) {
+            You("have become quite familiar with %s.",
+                yobjnam(uwep, (char *) 0));
+            uwep->known = TRUE;
+            update_inventory();
+        }
+    }
     /* if a "no longer poisoned" message is coming, it will be last;
        obj->opoisoned was cleared above and any message referring to
        "poisoned <obj>" has now been given; we want just "<obj>" for
@@ -1751,9 +1842,11 @@ int dieroll;
         context.botl = TRUE;
     }
 
-    if (unpoisonmsg)
+    if (unpoisonmsg) {
         Your("%s %s no longer poisoned.", saved_oname,
              vtense(saved_oname, "are"));
+        update_inventory();
+    }
 
     if (!destroyed) {
         print_mon_wounded(mon, saved_mhp);
@@ -2004,6 +2097,8 @@ struct monst *mdef;
 struct attack *mattk;
 {
     struct obj *otmp, *gold = 0, *stealoid, **minvent_ptr;
+    int i = rn2(10), dex_pick = 0, no_vis = 0,
+        size = 0, enc = 0, other = 0, cap;
     boolean as_mon = could_seduce(&youmonst, mdef, mattk);
 
     otmp = mdef->minvent;
@@ -2047,12 +2142,9 @@ struct attack *mattk;
     if (as_mon && gold)
         obj_extract_self(gold);
 
-    /* Rogue uses the thievery skill */
-    int i = rn2(10), dex_pick = 0, no_vis = 0,
-        size = 0, enc = 0, other = 0, cap;
-
-    /* dexterity directly affects how successful
-       a pickpocketing attempt will be */
+    /* Rogue uses the thievery skill; dexterity directly
+       affects how successful a pickpocketing attempt
+       will be */
     if (ACURR(A_DEX) <= 6)
         dex_pick += 3;
     else if (ACURR(A_DEX) <= 9)
@@ -2217,7 +2309,7 @@ struct attack *mattk;
         if (otmp == stealoid) /* special message for final item */
             pline("%s finishes taking off %s suit.", Monnam(mdef),
                     mhis(mdef));
-        if (really_steal(otmp, mdef)) /* hero got interrupted... */
+        if (!(otmp = really_steal(otmp, mdef))) /* hero got interrupted... */
             break;
         /* might have dropped otmp, and it might have broken or left level */
         if (!otmp || otmp->where != OBJ_INVENT)
@@ -2258,13 +2350,14 @@ struct attack *mattk;
  * armor, etc.
  * Assumes caller handles whatever other messages are necessary; this takes care
  * of the "You steal e - an imaginary widget" message.
- * Returns TRUE if and only if the player has done something that should
- * interrupt multi-stealing, such as stealing a cockatrice corpse and getting
- * petrified, but then getting lifesaved.*/
-STATIC_OVL boolean
+ * Returns the resulting object pointer (could have changed, since item may
+ * have merged with something in inventory), or null pointer if the player has
+ * done something that should interrupt multi-stealing, such as stealing a
+ * cockatrice corpse and getting petrified, but then getting lifesaved.*/
+STATIC_OVL struct obj *
 really_steal(obj, mdef)
-struct obj * obj;
-struct monst * mdef;
+struct obj *obj;
+struct monst *mdef;
 {
     long unwornmask = obj->owornmask;
     /* take the object away from the monster */
@@ -2274,18 +2367,18 @@ struct monst * mdef;
                               doname(obj), "You steal: ");
     /* might have dropped obj, and it might have broken or left level */
     if (!obj || obj->where != OBJ_INVENT)
-        return TRUE;
+        return (struct obj *) 0;
     if (theft_petrifies(obj))
-        return TRUE; /* stop thieving even though hero survived */
+        return (struct obj *) 0; /* stop thieving even though hero survived */
     /* more take-away handling, after theft message */
     if (unwornmask & W_WEP) { /* stole wielded weapon */
         possibly_unwield(mdef, FALSE);
     } else if (unwornmask & W_ARMG) { /* stole worn gloves */
         mselftouch(mdef, (const char *) 0, TRUE);
         if (DEADMONSTER(mdef)) /* it's now a statue */
-            return TRUE;       /* can't continue stealing */
+            return (struct obj *) 0; /* can't continue stealing */
     }
-    return FALSE;
+    return obj;
 }
 
 int
@@ -2298,6 +2391,8 @@ int specialdmg; /* blessed and/or silver bonus against various things */
     int armpro, tmp = d((int) mattk->damn, (int) mattk->damd);
     boolean negated;
     struct obj *mongold;
+    boolean mon_vorpal_wield = (MON_WEP(mdef)
+                                && MON_WEP(mdef)->oartifact == ART_VORPAL_BLADE);
 
     armpro = magic_negation(mdef);
     /* since hero can't be cancelled, only defender's armor applies */
@@ -2327,7 +2422,7 @@ int specialdmg; /* blessed and/or silver bonus against various things */
         goto physical;
     case AD_BHED:
         if (!rn2(15) || is_jabberwock(mdef->data)) {
-            if (!has_head(mdef->data)) {
+            if (!has_head(mdef->data) || mon_vorpal_wield) {
                 if (canseemon(mdef))
                     pline("Somehow, you miss %s wildly.", mon_nam(mdef));
                 tmp = 0;
@@ -2403,7 +2498,7 @@ int specialdmg; /* blessed and/or silver bonus against various things */
             break;
         }
         if (!Blind)
-            pline("%s is %s!", Monnam(mdef), on_fire(pd, mattk));
+            pline("%s is %s!", Monnam(mdef), on_fire(mdef, mattk->aatyp == AT_HUGS ? ON_FIRE_HUG : ON_FIRE));
         if (completelyburns(pd)) { /* paper golem or straw golem */
             if (!Blind)
                 pline("%s burns completely!", Monnam(mdef));
@@ -2465,10 +2560,9 @@ int specialdmg; /* blessed and/or silver bonus against various things */
         }
         tmp += destroy_mitem(mdef, POTION_CLASS, AD_COLD);
         break;
-    /* currently the only monster that uses AD_LOUD is
-     * the Nazgul, and they are M2_NOPOLY, but we'll put this
-     * here for completeness sake. we may add other creatures
-     * that can use this damage type at some point in the future */
+    /* currently the only monster that uses AD_LOUD are
+     * Nazgul and celestial dragons, and are both M2_NOPOLY,
+     * but we'll put this here for completeness sake */
     case AD_LOUD:
         if (negated) {
             tmp = 0;
@@ -2530,7 +2624,7 @@ int specialdmg; /* blessed and/or silver bonus against various things */
         if (mongold) {
             if (mongold->otyp != GOLD_PIECE) {
                 /* stole a gold non-coin object */
-                really_steal(mongold, mdef);
+                (void) really_steal(mongold, mdef);
             }
             else if (merge_choice(invent, mongold) || inv_cnt(FALSE) < 52) {
                 Your("purse feels heavier.");
@@ -2860,13 +2954,13 @@ do_rust:
         break;
     case AD_WTHR: {
         uchar withertime = max(2, tmp);
-        tmp = 0; /* doesn't deal immediate damage */
         boolean no_effect =
             (nonliving(pd) /* This could use is_fleshy(), but that would
                               make a large set of monsters immune like
                               fungus, blobs, and jellies. */
              || is_vampshifter(mdef) || negated);
         boolean lose_maxhp = (withertime >= 8); /* if already withering */
+        tmp = 0; /* doesn't deal immediate damage */
 
         if (!no_effect) {
             if (canseemon(mdef))
@@ -2942,6 +3036,9 @@ register struct monst *mdef;
 register struct attack *mattk;
 {
     register int tmp = d((int) mattk->damn, (int) mattk->damd);
+
+    if (!mdef)
+        return 0;
 
     switch (mattk->adtyp) {
     case AD_BLND:
@@ -3223,7 +3320,7 @@ register struct attack *mattk;
                         pline("%s seems mildly hot.", Monnam(mdef));
                         dam = 0;
                     } else
-                        pline("%s is burning to a crisp!", Monnam(mdef));
+                        pline("%s is %s!", Monnam(mdef), on_fire(mdef, ON_FIRE_ENGULF));
                     golemeffects(mdef, (int) mattk->adtyp, dam);
                 } else
                     dam = 0;
@@ -3388,7 +3485,8 @@ boolean weapon_attacks; /* skip weapon attacks if false */
     struct obj *weapon, **originalweapon;
     boolean altwep = FALSE, weapon_used = !weapon_attacks,
             stop_attacking = FALSE;
-    int i, tmp, armorpenalty, sum[NATTK], nsum = 0, dhit = 0, attknum = 0;
+    int i, tmp, armorpenalty, sum[NATTK], dhit = 0, attknum = 0;
+    /* int nsum = 0; */ /* nsum is not currently used */
     int dieroll;
     boolean monster_survived, Old_Upolyd = Upolyd;
 
@@ -3770,10 +3868,10 @@ boolean weapon_attacks; /* skip weapon attacks if false */
             /* defender dead */
             (void) passive(mon, weapon, 1, 0, mattk->aatyp, FALSE);
             stop_attacking = TRUE; /* zombification; DEADMONSTER is false */
-            nsum = 0; /* return value below used to be 'nsum > 0' */
+            /* nsum = 0; */ /* return value below used to be 'nsum > 0' */
         } else {
             (void) passive(mon, weapon, sum[i], 1, mattk->aatyp, FALSE);
-            nsum |= sum[i];
+            /* nsum |= sum[i]; */
         }
 
         /* don't use sum[i] beyond this point;

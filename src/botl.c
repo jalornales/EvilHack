@@ -138,9 +138,10 @@ do_statusline2()
     hpmax = Upolyd ? u.mhmax : u.uhpmax;
     if (hp < 0)
         hp = 0;
-    Sprintf(hlth, "HP:%d(%d) Pw:%d(%d) AC:%-2d",
+    Sprintf(hlth, "HP:%d(%d) Pw:%d(%d) AC:%-2d MC:%d TH:%-2d",
             min(hp, 9999), min(hpmax, 9999),
-            min(u.uen, 9999), min(u.uenmax, 9999), u.uac);
+            min(u.uen, 9999), min(u.uenmax, 9999), u.uac,
+            magic_negation(&youmonst), botl_hitbonus());
     hln = strlen(hlth);
 
     /* experience */
@@ -435,6 +436,80 @@ botl_score()
 }
 #endif /* SCORE_ON_BOTL */
 
+#ifdef REALTIME_ON_BOTL
+/* Returns a human readable formatted duration (e.g. 2h:03m:ss). */
+char *
+format_duration_with_units(seconds)
+long seconds;
+{
+    static char buf_fmt_duration[BUFSZ];
+    long minutes = seconds / 60;
+    long hours = minutes / 60;
+    long days = hours / 24;
+
+    seconds = seconds % 60;
+    minutes = minutes % 60;
+    hours = hours % 24;
+
+    if (days > 0) {
+        Sprintf(buf_fmt_duration, "%ldd:%2.2ldh:%2.2ldm:%2.2lds", days, hours, minutes, seconds);
+    } else if (hours > 0) {
+        Sprintf(buf_fmt_duration, "%ldh:%2.2ldm:%2.2lds", hours, minutes, seconds);
+    } else {
+        Sprintf(buf_fmt_duration, "%ldm:%2.2lds", minutes, seconds);
+    }
+    return buf_fmt_duration;
+}
+
+const char *
+botl_realtime(void)
+{
+    time_t currenttime;
+
+    if (iflags.show_realtime == 'p') {
+        /* play time */
+        currenttime = urealtime.realtime + (getnow() - urealtime.start_timing);
+    } else if (iflags.show_realtime == 'w') {
+        /* wallclock time */
+        currenttime = getnow() - ubirthday;
+    } else {
+        return "";
+    }
+
+    static char buf[BUFSZ] = { 0 };
+    switch (iflags.realtime_format) {
+    case 's':
+        Sprintf(buf, "%ld", currenttime);
+        break;
+
+    case 'c':
+        Sprintf(buf, "%ld:%2.2ld", currenttime / 3600, (currenttime % 3600) / 60);
+        break;
+
+    case 'f': {
+        long ss, mm, hh;
+        ss = currenttime % 60;
+        currenttime /= 60;
+        mm = currenttime % 60;
+        currenttime /= 60;
+        hh = currenttime;
+        Sprintf(buf, "%02ld:%02ld:%02ld", hh, mm, ss);
+        break;
+    }
+
+    case 'u':
+    default: {
+        char *duration = format_duration_with_units(currenttime);
+        /* only show 2 time units */
+        *(strchr(duration, ':')+4) = '\0';
+        Sprintf(buf, "%s", duration);
+    }
+    }
+    return buf;
+}
+
+#endif /* REALTIME_ON_BOTL */
+
 /* provide the name of the current level for display by various ports */
 int
 describe_level(buf)
@@ -580,8 +655,11 @@ STATIC_VAR struct istat_s initblstats[MAXBLSTATS] = {
     INIT_BLSTAT("power-max", "(%s)", ANY_INT, 10, BL_ENEMAX),
     INIT_BLSTATP("experience-level", " Xp:%s", ANY_INT, 10, BL_EXP, BL_XP),
     INIT_BLSTAT("armor-class", " AC:%s", ANY_INT, 10, BL_AC),
+    INIT_BLSTAT("magic-neg", " MC:%s", ANY_INT, 10, BL_MC),
+    INIT_BLSTAT("to-hit", " TH:%s", ANY_INT, 10, BL_TOHIT),
     INIT_BLSTAT("HD", " HD:%s", ANY_INT, 10, BL_HD),
     INIT_BLSTAT("time", " T:%s", ANY_LONG, 20, BL_TIME),
+    INIT_BLSTAT("realtime", " %s", ANY_STR, 10, BL_REALTIME),
     /* hunger used to be 'ANY_UINT'; see note below in bot_via_windowport() */
     INIT_BLSTAT("hunger", " %s", ANY_INT, 40, BL_HUNGER),
     INIT_BLSTATP("hitpoints", " HP:%s", ANY_INT, 10, BL_HPMAX, BL_HP),
@@ -734,6 +812,12 @@ bot_via_windowport()
     /* Armor class */
     blstats[idx][BL_AC].a.a_int = u.uac;
 
+    /* Magic negation */
+    blstats[idx][BL_MC].a.a_int = magic_negation(&youmonst);
+
+    /* To-hit bonus */
+    blstats[idx][BL_TOHIT].a.a_int = botl_hitbonus();
+
     /* Monster level (if Upolyd) */
     blstats[idx][BL_HD].a.a_int = Upolyd ? (int) mons[u.umonnum].mlevel : 0;
 
@@ -743,6 +827,11 @@ bot_via_windowport()
 
     /* Time (moves) */
     blstats[idx][BL_TIME].a.a_long = moves;
+
+#ifdef REALTIME_ON_BOTL
+    /* Realtime */
+    Strcpy(blstats[idx][BL_REALTIME].val, botl_realtime());
+#endif
 
     /* Hunger */
     /* note: u.uhs is unsigned, and 3.6.1's STATUS_HILITE defined
@@ -808,10 +897,19 @@ stat_update_time()
     int fld = BL_TIME;
 
     /* Time (moves) */
+    fld = BL_TIME;
     blstats[idx][fld].a.a_long = moves;
     valset[fld] = FALSE;
-
     eval_notify_windowport_field(fld, valset, idx);
+
+#ifdef REALTIME_ON_BOTL
+    /* Realtime */
+    fld = BL_REALTIME;
+    Strcpy(blstats[idx][fld].val, botl_realtime());
+    valset[fld] = FALSE;
+    eval_notify_windowport_field(fld, valset, idx);
+#endif
+
     if ((windowprocs.wincap2 & WC2_FLUSH_STATUS) != 0L)
         status_update(BL_FLUSH, (genericptr_t) 0, 0, 0,
                       NO_COLOR, (unsigned long *) 0);
@@ -951,6 +1049,9 @@ boolean *valsetlist;
         if (((i == BL_SCORE) && !flags.showscore)
             || ((i == BL_EXP) && !flags.showexp)
             || ((i == BL_TIME) && !flags.time)
+#ifdef REALTIME_ON_BOTL
+            || ((i == BL_REALTIME) && !iflags.show_realtime)
+#endif
             || ((i == BL_HD) && !Upolyd)
             || ((i == BL_XP || i == BL_EXP) && Upolyd)) {
             notpresent++;
@@ -1019,7 +1120,10 @@ boolean reassessment; /* TRUE: just recheck fields w/o other initialization */
                      : (fld == BL_EXP) ? (boolean) (flags.showexp && !Upolyd)
                        : (fld == BL_XP) ? (boolean) !Upolyd
                          : (fld == BL_HD) ? (boolean) Upolyd
-                           : TRUE;
+#ifdef REALTIME_ON_BOTL
+                           : (fld == BL_REALTIME) ? (boolean) iflags.show_realtime
+#endif
+                             : TRUE;
 
         fieldname = initblstats[i].fldname;
         fieldfmt = (fld == BL_TITLE && iflags.wc2_hitpointbar) ? "%-30.30s"
@@ -1480,8 +1584,11 @@ static struct fieldid_t {
     { "xl",       BL_XP },
     { "xplvl",    BL_XP },
     { "ac",       BL_AC },
+    { "mc",       BL_MC },
+    { "tohit",    BL_TOHIT },
     { "hit-dice", BL_HD },
     { "turns",    BL_TIME },
+    { "realtime", BL_REALTIME },
     { "hp",       BL_HP },
     { "hp-max",   BL_HPMAX },
     { "dgn",      BL_LEVELDESC },
@@ -2203,10 +2310,11 @@ boolean from_configfile;
 
             op = gt ? ">" : ge ? ">=" : lt ? "<" : le ? "<=" : "=";
             if (dt == ANY_INT
-                /* AC is the only field where negative values make sense but
-                   accept >-1 for other fields; reject <0 for non-AC */
+                /* AC and TOHIT are the only fields where negative values
+                   make sense but accept >-1 for other fields; reject <0
+                   for non-AC */
                 && (hilite.value.a_int
-                    < ((fld == BL_AC) ? -128 : gt ? -1 : lt ? 1 : 0)
+                    < ((fld == BL_AC || fld == BL_TOHIT) ? -128 : gt ? -1 : lt ? 1 : 0)
                 /* percentages have another more comprehensive check below */
                     || hilite.value.a_int > (percent ? (lt ? 101 : 100)
                                                      : LARGEST_INT))) {
@@ -3304,9 +3412,9 @@ choose_value:
             if (!index(numstart, '%'))
                 Strcat(numstart, "%");
 
-        /* reject negative values except for AC and >-1; reject 0 for < */
+        /* reject negative values except for AC/TOHIT and >-1; reject 0 for < */
         } else if (dt == ANY_INT
-                   && (aval.a_int < ((fld == BL_AC) ? -128
+                   && (aval.a_int < ((fld == BL_AC || fld == BL_TOHIT) ? -128
                                      : (lt_gt_eq == GT_VALUE) ? -1
                                        : (lt_gt_eq == LT_VALUE) ? 1 : 0))) {
             pline("%s'%s%d'%s", threshold_value,
@@ -3322,7 +3430,7 @@ choose_value:
 
         if (lt_gt_eq == NO_LTEQGT) {
             boolean ltok = ((dt == ANY_INT)
-                            ? (aval.a_int > 0 || fld == BL_AC)
+                            ? (aval.a_int > 0 || fld == BL_AC || fld == BL_TOHIT)
                             : (aval.a_long > 0L)),
                     gtok = (!percent || aval.a_long < 100);
 

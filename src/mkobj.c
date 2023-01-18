@@ -475,11 +475,11 @@ long num;
     /* as a back pointer to the container object when contained. */
     if (obj->where == OBJ_FLOOR)
         obj->nexthere = otmp;
+    if (obj->unpaid)
+        splitbill(obj, otmp);
     copy_oextra(otmp, obj);
     if (has_omid(otmp))
         free_omid(otmp); /* only one association with m_id*/
-    if (obj->unpaid)
-        splitbill(obj, otmp);
     if (obj->timed)
         obj_split_timers(obj, otmp);
     if (obj_sheds_light(obj))
@@ -839,7 +839,7 @@ boolean artif;
             if (is_poisonable(otmp) && !rn2(100))
                 otmp->opoisoned = 1;
 
-            if (artif && !rn2(30))
+            if (artif && !rn2(30 + (5 * u.uconduct.wisharti)))
                 otmp = mk_artifact(otmp, (aligntyp) A_NONE);
             else if (rn2(175) < (level_difficulty() / 2))
                 otmp = create_oprop(otmp, TRUE);
@@ -1055,7 +1055,7 @@ boolean artif;
                 otmp->spe = rne(3);
             } else
                 blessorcurse(otmp, 10);
-            if (artif && !rn2(40))
+            if (artif && !rn2(40 + (5 * u.uconduct.wisharti)))
                 otmp = mk_artifact(otmp, (aligntyp) A_NONE);
             else if (!rn2(150))
                 otmp = create_oprop(otmp, TRUE);
@@ -1362,9 +1362,14 @@ int old_range;
                    when changing intensity, using "less brightly" is
                    straightforward for dimming, but we need "brighter"
                    rather than "more brightly" for brightening; ugh */
-                pline("%s %s %s%s.", buf, otense(obj, "shine"),
-                      (abs(delta) > 1) ? "much " : "",
-                      (delta > 0) ? "brighter" : "less brightly");
+                if (obj->oartifact == ART_SHADOWBLADE)
+                    pline("%s aura becomes %s%s.", makeplural(buf),
+                          (abs(delta) > 1) ? "much " : "",
+                          (delta > 0) ? "darker" : "less dark");
+                else
+                    pline("%s %s %s%s.", buf, otense(obj, "shine"),
+                          (abs(delta) > 1) ? "much " : "",
+                          (delta > 0) ? "brighter" : "less brightly");
             }
         }
     }
@@ -1934,6 +1939,12 @@ register struct obj *otmp;
     if (Is_candle(otmp))
         return FALSE;
 
+    /* both the eye and the hand are fleshy, but they come from
+       Vecna, and are not harmed by fire */
+    if (otmp->oartifact == ART_EYE_OF_VECNA
+        || otmp->oartifact == ART_HAND_OF_VECNA)
+        return FALSE;
+
     if (objects[otyp].oc_oprop == FIRE_RES || otyp == WAN_FIRE)
         return FALSE;
 
@@ -2407,9 +2418,10 @@ struct obj *obj;
 
 /* create an object from a horn of plenty; mirrors bagotricks(makemon.c) */
 int
-hornoplenty(horn, tipping)
+hornoplenty(horn, tipping, targetbox)
 struct obj *horn;
-boolean tipping; /* caller emptying entire contents; affects shop handling */
+boolean tipping; /* caller emptying entire contents; affects shop mesgs */
+struct obj *targetbox; /* if non-Null, container to tip into */
 {
     int objcount = 0;
 
@@ -2417,6 +2429,10 @@ boolean tipping; /* caller emptying entire contents; affects shop handling */
         impossible("bad horn o' plenty");
     } else if (horn->spe < 1) {
         pline1(nothing_happens);
+        if (!horn->cknown) {
+            horn->cknown = 1;
+            update_inventory();
+        }
     } else {
         struct obj *obj;
         const char *what;
@@ -2459,6 +2475,16 @@ boolean tipping; /* caller emptying entire contents; affects shop handling */
                                           : "Oops!  %s to the floor!",
                                       The(aobjnam(obj, "slip")), (char *) 0);
             nhUse(obj);
+        } else if (targetbox) {
+            add_to_container(targetbox, obj);
+            /* add to container doesn't update the weight */
+            targetbox->owt = weight(targetbox);
+            /* item still in magic horn was weightless; when it's now in
+               a carried container, hero's encumbrance could change */
+            if (carried(targetbox)) {
+                (void) encumber_msg();
+                update_inventory(); /* for contents count or wizweight */
+            }
         } else {
             /* assumes this is taking place at hero's location */
             if (!can_reach_floor(TRUE)) {
@@ -2957,7 +2983,7 @@ struct obj *obj;
                 what = "ring";
         } else if (owornmask & W_TOOL) {
             if (obj->otyp != BLINDFOLD && obj->otyp != TOWEL
-                && obj->otyp != LENSES)
+                && obj->otyp != LENSES && obj->otyp != GOGGLES)
                 what = "blindfold";
         } else if (owornmask & W_BALL) {
             if (obj->oclass != BALL_CLASS)
@@ -3585,10 +3611,10 @@ int mat;
     if (objects[obj->otyp].oc_material == mat) {
         return TRUE;
     } else {
+        const struct icp* materials = material_list(obj);
+
         if (invalid_obj_material(obj, mat))
             return FALSE;
-
-        const struct icp* materials = material_list(obj);
 
         if (materials) {
             int i = 100; /* guarantee going through everything */
@@ -3613,9 +3639,15 @@ set_material(otmp, material)
 struct obj* otmp;
 int material;
 {
-    if (!valid_obj_material(otmp, material))
-        impossible("setting material of %s to invalid material %d",
-                   OBJ_NAME(objects[otmp->otyp]), material);
+    if (!valid_obj_material(otmp, material)) {
+        /* change impossible to a pline only if fuzzing */
+        if (iflags.debug_fuzzer)
+            pline("setting material of %s to invalid material %d",
+                  OBJ_NAME(objects[otmp->otyp]), material);
+        else
+            impossible("setting material of %s to invalid material %d",
+                       OBJ_NAME(objects[otmp->otyp]), material);
+    }
 
     otmp->material = material;
     otmp->owt = weight(otmp);

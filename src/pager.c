@@ -304,8 +304,13 @@ int x, y;
                     ? "peaceful "
                     : "",
             name);
-    if (mtmp->mextra && ERID(mtmp) && ERID(mtmp)->m1)
-        Sprintf(eos(buf), ", riding %s", a_monnam(ERID(mtmp)->m1));
+    if (mtmp->mextra && ERID(mtmp) && ERID(mtmp)->m1) {
+        if (is_rider(mtmp->data) && (distu(mtmp->mx, mtmp->my) > 2)
+            && !canseemon(mtmp))
+            Sprintf(eos(buf), ", riding its steed.");
+        else
+            Sprintf(eos(buf), ", riding %s", a_monnam(ERID(mtmp)->m1));
+    }
     if (mtmp->rider_id)
         Sprintf(eos(buf), ", being ridden");
     mwounds = mon_wounds(mtmp);
@@ -760,7 +765,7 @@ struct permonst * pm;
 {
     char buf[BUFSZ];
     char buf2[BUFSZ];
-    int gen = pm->geno;
+    int i, gen = pm->geno;
     int freq = (gen & G_FREQ);
     int pct = max(5, (int) (pm->cwt / 90));
     boolean uniq = !!(gen & G_UNIQ);
@@ -995,7 +1000,6 @@ struct permonst * pm;
 
     /* Attacks */
     buf[0] = buf2[0] = '\0';
-    int i;
     for (i = 0; i < 6; i++) {
         char dicebuf[20]; /* should be a safe limit */
         struct attack * attk = &(pm->mattk[i]);
@@ -1033,6 +1037,11 @@ struct permonst * pm;
 #undef APPENDC
 #undef MONPUTSTR
 
+extern const struct propname {
+    int prop_num;
+    const char* prop_name;
+} propertynames[]; /* located in timeout.c */
+
 /* Add some information to an encyclopedia window which is printing information
  * about an object. */
 STATIC_OVL void
@@ -1044,6 +1053,7 @@ short otyp;
     char olet = oc.oc_class;
     char buf[BUFSZ];
     char buf2[BUFSZ];
+    boolean weptool = (olet == TOOL_CLASS && oc.oc_skill != P_NONE);
     const char* dir = (oc.oc_dir == NODIR ? "Non-directional"
                                           : (oc.oc_dir == IMMEDIATE ? "Beam"
                                                                     : "Ray"));
@@ -1060,9 +1070,12 @@ short otyp;
     OBJPUTSTR("");
 
     /* Object classes currently with no special messages here: amulets. */
-    boolean weptool = (olet == TOOL_CLASS && oc.oc_skill != P_NONE);
     if (olet == WEAPON_CLASS || weptool) {
         const int skill = oc.oc_skill;
+        const char* dmgtyp = "blunt";
+        const char* sdambon = "";
+        const char* ldambon = "";
+
         if (skill >= 0) {
             Sprintf(buf, "%s-handed weapon%s using the %s skill.",
                     (oc.oc_bimanual ? "Two" : "Single"),
@@ -1079,7 +1092,6 @@ short otyp;
         }
         OBJPUTSTR(buf);
 
-        const char* dmgtyp = "blunt";
         if (oc.oc_dir & PIERCE) {
             dmgtyp = "piercing";
             if (oc.oc_dir & SLASH) {
@@ -1093,8 +1105,6 @@ short otyp;
 
         /* Ugh. Can we just get rid of dmgval() and put its damage bonuses into
          * the object class? */
-        const char* sdambon = "";
-        const char* ldambon = "";
         switch (otyp) {
         case IRON_CHAIN:
         case CROSSBOW_BOLT:
@@ -1332,10 +1342,6 @@ short otyp;
     }
 
     /* power conferred */
-    extern const struct propname {
-        int prop_num;
-        const char* prop_name;
-    } propertynames[]; /* located in timeout.c */
     if (oc.oc_oprop) {
         int i;
         for (i = 0; propertynames[i].prop_name; ++i) {
@@ -1485,10 +1491,14 @@ char *supplemental_name;
      * for Angel and angel, make the lookup string the same for both
      * user_typed_name and picked name.
      */
-    if (pm != (struct permonst *) 0 && !user_typed_name)
-        dbase_str = strcpy(newstr, pm->mname);
-    else
+    if (pm != (struct permonst *) 0 && !user_typed_name) {
+        if (is_rider(pm))
+            dbase_str = strcpy(newstr, "Rider");
+        else
+            dbase_str = strcpy(newstr, pm->mname);
+    } else {
         dbase_str = strcpy(newstr, inp);
+    }
     (void) lcase(dbase_str);
 
     /*
@@ -1564,7 +1574,7 @@ char *supplemental_name;
        (note: strncpy() only terminates output string if the specified
        count is bigger than the length of the substring being copied) */
     if (!strncmp(dbase_str, "moist towel", 11))
-        (void) strncpy(dbase_str += 2, "wet", 3); /* skip "mo" replace "ist" */
+        memcpy(dbase_str += 2, "wet", 3); /* skip "mo" replace "ist" */
 
     /* Remove material, if it exists, but store the original value in
      * dbase_str_with_material. It should be cut out of dbase_str as a prefix
@@ -1639,6 +1649,8 @@ char *supplemental_name;
 
         pass1found_in_file = FALSE;
         for (pass = !strcmp(alt, dbase_str) ? 0 : 1; pass >= 0; --pass) {
+            long entry_offset, fseekoffset;
+            int entry_count;
             found_in_file = skipping_entry = FALSE;
             txt_offset = 0L;
             if (dlb_fseek(fp, txt_offset, SEEK_SET) < 0 ) {
@@ -1694,9 +1706,6 @@ char *supplemental_name;
             }
 
             /* database entry should exist, now find where it is */
-            long entry_offset, fseekoffset;
-            int entry_count;
-            int i;
             if (found_in_file) {
                 /* skip over other possible matches for the info */
                 do {
@@ -1784,18 +1793,21 @@ char *supplemental_name;
 
                     if (!flags.lookup_data) {
                         ; /* do nothing, 'pokedex' is disabled */
-                    }
-                    /* object lookup info */
-                    else if (do_obj_lookup) {
+                    } else if (do_obj_lookup) { /* object lookup info */
                         add_obj_info(datawin, otyp);
                         putstr(datawin, 0, "");
-                    }
-                    /* monster lookup info */
                     /* secondary to object lookup because there are some
                      * monsters whose names are substrings of objects, like
                      * "skeleton" and "skeleton key". */
-                    else if (do_mon_lookup) {
-                        add_mon_info(datawin, pm);
+                    } else if (do_mon_lookup) { /* monster lookup info */
+                        if (!wizard && (pm == &mons[PM_SHAMBLING_HORROR])
+                            && mvitals[PM_SHAMBLING_HORROR].died < 1)
+                            ; /* no freebies until one has been killed */
+                        else if (is_rider(pm) && !user_typed_name
+                                 && !without_asking)
+                            ; /* no stats via farlook */
+                        else
+                            add_mon_info(datawin, pm);
                         if (is_were(pm) && pm != &mons[PM_RAT_KING]) {
                             /* also do the alternate form */
                             putstr(datawin, 0, "");
@@ -1808,6 +1820,7 @@ char *supplemental_name;
                     /* encyclopedia entry */
                     if (found_in_file) {
                         char titlebuf[BUFSZ];
+                        int i;
                         if (dlb_fseek(fp, (long) txt_offset + entry_offset,
                                       SEEK_SET) < 0) {
                             pline("? Seek error on 'data' file!");
@@ -1886,7 +1899,8 @@ struct permonst **for_supplement;
     int i, alt_i, j, glyph = NO_GLYPH,
         skipped_venom = 0, found = 0; /* count of matching syms found */
     boolean hit_trap, need_to_look = FALSE,
-            submerged = (Underwater && !Is_waterlevel(&u.uz));
+            submerged = (Underwater && !Is_waterlevel(&u.uz)
+                         && !See_underwater);
     const char *x_str;
     nhsym tmpsym;
 

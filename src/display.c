@@ -762,7 +762,8 @@ register int x, y;
     if (Underwater && !Is_waterlevel(&u.uz)) {
         /* when underwater, don't do anything unless <x,y> is an
            adjacent water or lava or ice position */
-        if (!(is_pool_or_lava(x, y) || is_ice(x, y)) || distu(x, y) > 2)
+        if (!(is_pool_or_lava(x, y) || is_ice(x, y))
+            || (!See_underwater && distu(x, y) > 2))
             return;
     }
 
@@ -894,7 +895,8 @@ register int x, y;
                 goto show_mem;
         } else {
  show_mem:
-            show_glyph(x, y, lev->glyph);
+            if (!Underwater)
+                show_glyph(x, y, lev->glyph);
         }
     }
 }
@@ -1277,8 +1279,8 @@ int mode;
 
 /*
  * Loop through all of the monsters and update them.  Called when:
- *      + going blind & telepathic
- *      + regaining sight & telepathic
+ *      + going blind & telepathic or glow warning
+ *      + regaining sight & telepathic or glow warning
  *      + getting and losing infravision
  *      + hallucinating
  *      + doing a full screen redraw
@@ -1293,7 +1295,8 @@ void
 see_monsters()
 {
     register struct monst *mon;
-    int new_warn_obj_cnt = 0;
+    register struct obj *otmp;
+    unsigned long raceflags;
 
     if (defer_see_monsters)
         return;
@@ -1305,21 +1308,34 @@ see_monsters()
         if (mon->wormno)
             see_wsegs(mon);
 
-        unsigned long raceflags;
         if (has_erac(mon))
             raceflags = ERAC(mon)->mrace;
         else
             raceflags = mon->data->mhflags;
-        if (Warn_of_mon && (context.warntype.obj & raceflags) != 0L)
-            new_warn_obj_cnt++;
+
+        /* Track how many monsters each glow warning artifact is aware of. */
+        if (Warn_of_mon && (context.warntype.obj & raceflags) != 0L) {
+            for (otmp = invent; otmp; otmp = otmp->nobj) {
+                if (((otmp->owornmask & (W_ARMOR | W_ACCESSORY | W_WEP))
+                        || (u.twoweap && (otmp->owornmask & W_SWAPWEP)))
+                    && has_glow_warning(otmp) & raceflags) {
+                    otmp->newwarncnt++;
+                }
+            }
+        }
     }
-    /*
-     * Make Sting glow blue or stop glowing if required.
-     */
-    if (new_warn_obj_cnt != warn_obj_cnt) {
-        Sting_effects(new_warn_obj_cnt);
-        Sting_effects_offhand(new_warn_obj_cnt);
-        warn_obj_cnt = new_warn_obj_cnt;
+
+    /* Make artifacts like Sting that glow to warn of certain monsters adjust their glows. */
+    for (otmp = invent; otmp; otmp = otmp->nobj) {
+        if (((otmp->owornmask & (W_ARMOR | W_ACCESSORY | W_WEP))
+                || (u.twoweap && (otmp->owornmask & W_SWAPWEP)))
+            && has_glow_warning(otmp)) {
+            if (otmp->newwarncnt != (int)otmp->lastwarncnt) {
+                glow_warning_effects(otmp);
+                otmp->lastwarncnt = otmp->newwarncnt;
+            }
+            otmp->newwarncnt = 0;
+        }
     }
 
     /* when mounted, hero's location gets caught by monster loop */
@@ -1407,7 +1423,7 @@ docrt()
         swallowed(1);
         goto post_map;
     }
-    if (Underwater && !Is_waterlevel(&u.uz)) {
+    if (Underwater && !Is_waterlevel(&u.uz) && !See_underwater) {
         under_water(1);
         goto post_map;
     }
@@ -1427,11 +1443,13 @@ docrt()
     cls();
 
     /* display memory */
-    for (x = 1; x < COLNO; x++) {
-        lev = &levl[x][0];
-        for (y = 0; y < ROWNO; y++, lev++)
-            if (lev->glyph != cmap_to_glyph(S_stone))
-                show_glyph(x, y, lev->glyph);
+    if (!Underwater) {
+        for (x = 1; x < COLNO; x++) {
+            lev = &levl[x][0];
+            for (y = 0; y < ROWNO; y++, lev++)
+                if (lev->glyph != cmap_to_glyph(S_stone))
+                    show_glyph(x, y, lev->glyph);
+        }
     }
 
     /* see what is to be seen */
@@ -2047,7 +2065,8 @@ int x, y, which;
     if (!isok(x, y))
         return which;
     type = levl[x][y].typ;
-    if (IS_ROCK(type) || type == CORR || type == SCORR)
+    if ((IS_ROCK(type) && type != TREE && type != DEADTREE)
+        || type == CORR || type == SCORR)
         return which;
     return 0;
 }

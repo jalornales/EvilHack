@@ -317,7 +317,9 @@ register struct monst *mtmp;
            because that will leave its shop untended */
         || (mtmp->isshk && inhishop(mtmp))
         /* likewise for temple priests */
-        || (mtmp->ispriest && inhistemple(mtmp)))
+        || (mtmp->ispriest && inhistemple(mtmp))
+        /* Lucifer in the sanctum */
+        || (mtmp->islucifer && Is_sanctum(&u.uz)))
         return (unsigned long) STRAT_NONE;
 
     switch ((mtmp->mhp * 3) / mtmp->mhpmax) { /* 0-3 */
@@ -526,7 +528,8 @@ register struct monst *mtmp;
                 /* teleport to it and pick it up */
                 rloc_to(mtmp, tx, ty); /* clean old pos */
 
-                if ((otmp = on_ground(which_arti(targ))) != 0) {
+                if ((otmp = on_ground(which_arti(targ))) != 0
+                    && !can_levitate(mtmp)) {
                     if (cansee(mtmp->mx, mtmp->my))
                         pline("%s picks up %s.", Monnam(mtmp),
                               (distu(mtmp->mx, mtmp->my) <= 5)
@@ -587,7 +590,7 @@ aggravate()
     boolean in_w_tower = In_W_tower(u.ux, u.uy, &u.uz);
 
     for (mtmp = fmon; mtmp; mtmp = mtmp->nmon) {
-        if (DEADMONSTER(mtmp))
+        if (DEADMONSTER(mtmp) || mtmp->islucifer)
             continue;
         if (in_w_tower != In_W_tower(mtmp->mx, mtmp->my, &u.uz))
             continue;
@@ -823,8 +826,11 @@ void
 intervene()
 {
     struct monst *mtmp = (struct monst *) 0;
-    int which = Is_astralevel(&u.uz) ? rnd(4) : rn2(8);
-    /* many cases don't apply on the Astral level or Planes */
+    int which = Is_astralevel(&u.uz) ? rnd(4) : rn2(9);
+    /* many cases don't apply on the Astral level or Planes.
+       with the introduction of Purgatory, the ascension run
+       has been shortened by quite a bit. the odds of Rodney
+       appearing have been increased */
     switch (which) {
     case 0:
         You_feel("apprehensive.");
@@ -844,9 +850,10 @@ intervene()
         (void) nasty((struct monst *) 0, FALSE);
         break;
     case 5:
+    case 6:
         resurrect();
         break;
-    case 6:
+    case 7:
         if (u.uevent.invoked) {
             pline_The("entire dungeon starts shaking around you!");
             do_earthquake((MAXULEV - 1) / 3 + 1);
@@ -859,7 +866,7 @@ intervene()
             awaken_monsters(ROWNO * COLNO);
         }
         break;
-    case 7:
+    case 8:
         (void) nasty((struct monst *) 0, TRUE);
         break;
     }
@@ -927,6 +934,15 @@ const char *const random_goblinking[] = {
     "So you want to explore Mines' End, eh?  Over my dead body",
 };
 
+const char *const random_gollum[] = {
+    "Precious, precious, precious!  My Precious!  O my Precious",
+    "Losst it is, my precious, lost, lost!  Curse us and crush us, my precious is lost",
+    "Never!  Smeagol wouldn't hurt a fly",
+    "It isn't fair, my precious, is it, to ask us what it's got in it's nassty little pocketsess",
+    "We wants it, we needs it.  Must have the precious.  They stole it from us",
+    "And they doesn't taste very nice, does they, Precious",
+};
+
 /* Insult or intimidate the player */
 void
 cuss(mtmp)
@@ -959,18 +975,28 @@ register struct monst *mtmp;
             pline("%s points and giggles at you.", Monnam(mtmp));
             if (kathryn_bday())
                 verbalize("It's my birthday!  Woohoo!!");
-        } else
+            else if (bourbon_bday())
+                verbalize("Wish Bourbon a happy birthday!  Now!!");
+            else if (ozzy_bday())
+                verbalize("Say happy birthday to Ozzy!  Say it!!");
+        } else {
             verbalize("%s!",
                       random_icequeen[rn2(SIZE(random_icequeen))]);
+        }
     } else if (mtmp->data == &mons[PM_KATHRYN_THE_ENCHANTRESS]) {
         if (mtmp->mpeaceful) {
             if (!rn2(5)) {
                 pline("%s waves to you.", Monnam(mtmp));
                 if (kathryn_bday())
                     verbalize("You freed me on my birthday!  Thank you so much!!");
-            } else
+                else if (bourbon_bday())
+                    verbalize("Happy birthday, Bourbon!  Good girl!!");
+                else if (ozzy_bday())
+                    verbalize("Happy birthday, Ozzy!  You're a good boy, yes you are!!");
+            } else {
                 verbalize("%s.",
                         random_enchantress[rn2(SIZE(random_enchantress))]);
+            }
         } else {
             if (!rn2(7))
                 pline("%s waves to you.", Monnam(mtmp));
@@ -981,11 +1007,74 @@ register struct monst *mtmp;
     } else if (mtmp->isgking) {
         verbalize("%s!",
                   random_goblinking[rn2(SIZE(random_goblinking))]);
+    } else if (mtmp->data == &mons[PM_GOLLUM]) {
+        verbalize("%s!",
+                  random_gollum[rn2(SIZE(random_gollum))]);
     } else {
         if (!rn2(is_minion(mtmp->data) ? 100 : 5))
             pline("%s casts aspersions on your ancestry.", Monnam(mtmp));
         else
             com_pager(rn2(QTN_DEMONIC) + QT_DEMONIC);
+    }
+}
+
+const char *const random_mplayer_amulet[] = {
+    "Give me the Amulet of Yendor",
+    "Where is the Amulet?  I need it to escape this place",
+    "This isn't Purgatory, it's Hell with a nice view",
+    "Either you relinquish the Amulet now, or I will kill you"
+};
+
+const char *const random_mplayer_idol[] = {
+    "Give me the Idol of Moloch",
+    "Where is the Idol?  I need it to escape this place",
+    "This isn't Purgatory, it's Hell with a nice view",
+    "Either you relinquish the Idol now, or I will kill you"
+};
+
+/* Player monsters harass the player in Purgatory */
+void
+mplayer_purg_talk(mtmp)
+register struct monst *mtmp;
+{
+    if (Deaf)
+        return;
+    if (is_mplayer(mtmp->data)) {
+        if (Role_if(PM_INFIDEL))
+            verbalize("%s!",
+                      random_mplayer_idol[rn2(SIZE(random_mplayer_idol))]);
+        else
+            verbalize("%s!",
+                      random_mplayer_amulet[rn2(SIZE(random_mplayer_amulet))]);
+    }
+}
+
+const char *const random_arch_amulet[] = {
+    "Hast thou come to repent thy sins?",
+    "Give unto me the Amulet, and I shall cleanse thee of thy sins.",
+    "Only those that are pure of heart can ascend to glory."
+};
+
+const char *const random_arch_idol[] = {
+    "Begone, foul Infidel!  I cast thee back to hell!",
+    "Return from whence thou cam'st!",
+    "I shall relieve thee of thy charge, and destroy thine wicked Idol!"
+};
+
+/* Saint Michael the Archangel */
+void
+archangel_purg_talk(mtmp)
+register struct monst *mtmp;
+{
+    if (Deaf)
+        return;
+    if (mtmp->data == &mons[PM_ARCHANGEL]) {
+        if (Role_if(PM_INFIDEL))
+            verbalize("%s",
+                      random_arch_idol[rn2(SIZE(random_arch_idol))]);
+        else
+            verbalize("%s",
+                      random_arch_amulet[rn2(SIZE(random_arch_amulet))]);
     }
 }
 

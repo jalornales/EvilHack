@@ -453,12 +453,14 @@ int x, y;
                                           || Flying || Levitation))
                           || is_swimmer(etmp->edata)
                           || is_flyer(etmp->edata)
-                          || is_floater(etmp->edata));
+                          || is_floater(etmp->edata)
+                          || can_levitate(etmp->emon));
     /* must force call to lava_effects in e_died if is_u */
     if (is_lava(x, y))
         return (boolean) ((is_u(etmp) && (Levitation || Flying))
                           || likes_lava(etmp->edata)
-                          || is_flyer(etmp->edata));
+                          || is_flyer(etmp->edata)
+                          || can_levitate(etmp->emon));
     if (is_db_wall(x, y))
         return (boolean) (is_u(etmp) ? Passes_walls
                           : passes_walls(etmp->edata));
@@ -914,6 +916,8 @@ int x, y;
     unblock_point(x2, y2); /* vision */
     if (Is_stronghold(&u.uz))
         u.uevent.uopened_dbridge = TRUE;
+    if (In_purgatory(&u.uz))
+        wake_nearto(x, y, 200);
     nokiller();
 }
 

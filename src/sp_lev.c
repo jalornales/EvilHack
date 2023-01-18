@@ -1659,11 +1659,14 @@ struct mkroom *croom;
         pm = (struct permonst *) 0;
 
     /* Make Sanctum monsters more friendly to Infidels */
-    if (u.ualign.type == A_NONE && Is_sanctum(&u.uz) && m->peaceful == 0)
-        m->peaceful = 1;
-    /* OTOH, the Astral shouldn't be easy; but the multitude of
-     * renegade minions of Moloch is still silly */
-    if (Role_if(PM_INFIDEL) && Is_astralevel(&u.uz) && amask == AM_NONE)
+    if (Role_if(PM_INFIDEL) && Is_sanctum(&u.uz) && m->peaceful == 0) {
+        if (pm && pm != &mons[PM_LUCIFER])
+            m->peaceful = 1;
+    }
+    /* OTOH, Astral shouldn't be easy for followers of Moloch; but
+       the multitude of renegade minions of Moloch is still silly */
+    if (u.ualign.type == A_NONE && Is_astralevel(&u.uz)
+        && amask == AM_NONE)
         amask = Align2amask(rn1(3, -1));
 
     if (pm) {
@@ -6257,27 +6260,28 @@ const char *name;
     struct version_info vers_info;
 
     if (!(lvl = sp_lev_cache(name))) {
-	fd = dlb_fopen(name, RDBMODE);
-	if (!fd)
-             return FALSE;
-	Fread((genericptr_t) &vers_info, sizeof vers_info, 1, fd);
-	if (!check_version(&vers_info, name, TRUE)) {
+        fd = dlb_fopen(name, RDBMODE);
+        if (!fd)
+            return FALSE;
+        Fread((genericptr_t) &vers_info, sizeof vers_info, 1, fd);
+        if (!check_version(&vers_info, name, TRUE)) {
             (void) dlb_fclose(fd);
-	    goto give_up;
-	}
+            goto give_up;
+        }
 
     lvl = (sp_lev *) alloc(sizeof(sp_lev));
     if (!lvl) panic("alloc sp_lev");
         result = sp_level_loader(fd, lvl);
     (void) dlb_fclose(fd);
-    if (in_mk_rndvault) sp_lev_savecache(name, lvl);
+    if (in_mk_rndvault)
+        sp_lev_savecache(name, lvl);
     if (result) result = sp_level_coder(lvl);
         if (!in_mk_rndvault) {
-	    sp_level_free(lvl);
-	    Free(lvl);
+            sp_level_free(lvl);
+            Free(lvl);
         }
     } else {
-	result = sp_level_coder(lvl);
+        result = sp_level_coder(lvl);
     }
 
 give_up:

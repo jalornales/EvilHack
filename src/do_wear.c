@@ -681,6 +681,11 @@ Gloves_on(VOID_ARGS)
         break;
     case GAUNTLETS_OF_POWER:
     case MUMMIFIED_HAND: /* the Hand of Vecna */
+        if (u.ualign.record >= 20
+            && uarmg->oartifact == ART_GAUNTLETS_OF_PURITY) {
+            pline_The("%s sense your piety, and slide comfortably over your %s.",
+                      artiname(uarmg->oartifact), makeplural(body_part(HAND)));
+        }
         makeknown(uarmg->otyp);
         context.botl = 1; /* taken care of in attrib.c */
         break;
@@ -962,6 +967,15 @@ dragon_armor_handling(struct obj *otmp, boolean puton)
                     (void) drown();
                 }
             }
+        }
+        break;
+    case CELESTIAL_DRAGON_SCALES:
+        if (puton) {
+            ESleep_resistance  |= W_ARM;
+            EShock_resistance  |= W_ARM;
+        } else {
+            ESleep_resistance  &= ~W_ARM;
+            EShock_resistance  &= ~W_ARM;
         }
         break;
     case CHROMATIC_DRAGON_SCALES:
@@ -1622,7 +1636,7 @@ struct obj *otmp;
         if (was_blind) {
             /* "still cannot see" makes no sense when removing lenses
                since they can't have been the cause of your blindness */
-            if (otmp->otyp != LENSES)
+            if (otmp->otyp != LENSES || otmp->otyp != GOGGLES)
                 You("still cannot see.");
         } else {
             changed = TRUE; /* !was_blind */
@@ -1999,6 +2013,8 @@ cursed(otmp, silent)
 struct obj *otmp;
 boolean silent;
 {
+    boolean use_plural;
+
     if (!otmp) {
         impossible("cursed without otmp");
         return 0;
@@ -2011,10 +2027,9 @@ boolean silent;
     if (silent)
         return 1;
 
-    /* Curses, like chickens, come home to roost. */
-    boolean use_plural = (is_boots(otmp) || is_gloves(otmp)
-                          || otmp->otyp == LENSES || otmp->quan > 1L);
-
+    use_plural = (is_boots(otmp) || is_gloves(otmp)
+                  || otmp->otyp == LENSES || otmp->otyp == GOGGLES
+                  || otmp->quan > 1L);
     /* might be trying again after applying grease to hands */
     if (Glib && otmp->bknown
         /* for weapon, we'll only get here via 'A )' */
@@ -2242,7 +2257,7 @@ boolean noisy;
             /* break_armor() pushes boots off for centaurs,
                so don't let dowear() put them back on... */
             if (noisy)
-                pline("You have too many hooves to wear %s.",
+                Your ("hooves are not shaped correctly to wear %s.",
                       c_boots); /* makeplural(body_part(FOOT)) yields
                                    "rear hooves" which sounds odd */
             err++;
@@ -2251,7 +2266,7 @@ boolean noisy;
                whilst wearing footwear, plus their shape is
                all wrong */
             if (noisy)
-                pline("Your %s are not shaped correctly to wear %s.",
+                Your ("%s are not shaped correctly to wear %s.",
                       makeplural(body_part(FOOT)), c_boots);
             err++;
         } else if (u.utrap
@@ -2290,12 +2305,19 @@ boolean noisy;
                 Your("%s are too slippery to pull on %s.",
                      fingers_or_gloves(FALSE), gloves_simple_name(otmp));
             err++;
-        } else if (!Upolyd && Race_if(PM_TORTLE) && is_hard(otmp)) {
+        } else if (!Upolyd && Race_if(PM_TORTLE) && is_hard(otmp)
+                   && otmp->oartifact != ART_GAUNTLETS_OF_PURITY) {
             /* Tortles can't retreat back into their shells
                whilst wearing rigid gauntlets */
             if (noisy)
                 pline_The("%s are too rigid to wear.",
                           gloves_simple_name(otmp));
+            err++;
+        } else if (!wizard && u.ualign.record < 20
+                   && otmp->oartifact == ART_GAUNTLETS_OF_PURITY) {
+            if (noisy)
+                You("are not pure enough to wear these %s.",
+                    gloves_simple_name(otmp));
             err++;
         } else
             *mask = W_ARMG;
@@ -2391,7 +2413,7 @@ struct obj *obj;
     armor = (obj->oclass == ARMOR_CLASS);
     ring = (obj->oclass == RING_CLASS || obj->otyp == MEAT_RING);
     eyewear = (obj->otyp == BLINDFOLD || obj->otyp == TOWEL
-               || obj->otyp == LENSES);
+               || obj->otyp == LENSES || obj->otyp == GOGGLES);
     /* checks which are performed prior to actually touching the item */
     if (armor) {
         if (!canwearobj(obj, &mask, TRUE))
@@ -2486,13 +2508,24 @@ struct obj *obj;
                 else if (ublindf->otyp == BLINDFOLD) {
                     if (obj->otyp == LENSES)
                         already_wearing2("lenses", "a blindfold");
+                    else if (obj->otyp == GOGGLES)
+                        already_wearing2("goggles", "a blindfold");
                     else
                         already_wearing("a blindfold");
                 } else if (ublindf->otyp == LENSES) {
                     if (obj->otyp == BLINDFOLD)
                         already_wearing2("a blindfold", "some lenses");
+                    else if (obj->otyp == GOGGLES)
+                        already_wearing2("goggles", "some lenses");
                     else
                         already_wearing("some lenses");
+                } else if (ublindf->otyp == GOGGLES) {
+                    if (obj->otyp == BLINDFOLD)
+                        already_wearing2("a blindfold", "some goggles");
+                    else if (obj->otyp == LENSES)
+                        already_wearing2("lenses", "some goggles");
+                    else
+                        already_wearing("some goggles");
                 } else {
                     already_wearing(something); /* ??? */
                 }
@@ -2625,7 +2658,9 @@ doputon()
         Your("%s%s are full, and you're already wearing an amulet and %s.",
              humanoid(youmonst.data) ? "ring-" : "",
              fingers_or_gloves(FALSE),
-             (ublindf->otyp == LENSES) ? "some lenses" : "a blindfold");
+             (ublindf->otyp == LENSES) ? "some lenses"
+                                       : (ublindf->otyp == GOGGLES) ? "some goggles"
+                                                                    : "a blindfold");
         return 0;
     }
     otmp = getobj(accessories, "put on");
@@ -2719,6 +2754,14 @@ find_ac()
         uac -= uright->spe;
     if (uamul && uamul->otyp == AMULET_OF_GUARDING)
         uac -= 2; /* fixed amount; main benefit is to MC */
+    if (uarms && uarms->oartifact == ART_ASHMAR) {
+        /* significant fixed amount, especially as
+           a dwarf */
+        if (!Upolyd && Race_if(PM_DWARF))
+            uac -= 7;
+        else
+            uac -= 5;
+    }
 
     /* armor class from other sources */
     if (HProtection & INTRINSIC)

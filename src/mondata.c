@@ -111,7 +111,7 @@ int adtyp;
     /* if 'mon' is an adult dragon, treat it as if it was wearing scales
        so that it has the same benefit as a hero wearing dragon scales */
     mndx = monsndx(mon->data);
-    if (mndx >= PM_GRAY_DRAGON && mndx <= PM_YELLOW_DRAGON) {
+    if (mndx >= PM_GRAY_DRAGON && mndx <= PM_CELESTIAL_DRAGON) {
         /* a dragon is its own suit...  if mon is poly'd hero, we don't
            care about embedded scales (uskin) because being a dragon with
            embedded scales is no better than just being a dragon */
@@ -326,16 +326,20 @@ int element;
 
     switch (element) {
         case AD_FIRE:
-            return ((mon->data->mflags4 & M4_VULNERABLE_FIRE)
+            return (((mon->data->mflags4 & M4_VULNERABLE_FIRE) != 0
+                     || mon->vuln_fire)
                     && !resists_fire(mon));
         case AD_COLD:
-            return ((mon->data->mflags4 & M4_VULNERABLE_COLD)
+            return (((mon->data->mflags4 & M4_VULNERABLE_COLD) != 0
+                      || mon->vuln_cold)
                     && !resists_cold(mon));
         case AD_ELEC:
-            return ((mon->data->mflags4 & M4_VULNERABLE_ELEC)
+            return (((mon->data->mflags4 & M4_VULNERABLE_ELEC) != 0
+                      || mon->vuln_elec)
                     && !resists_elec(mon));
         case AD_ACID:
-            return ((mon->data->mflags4 & M4_VULNERABLE_ACID)
+            return (((mon->data->mflags4 & M4_VULNERABLE_ACID) != 0
+                      || mon->vuln_acid)
                     && !resists_acid(mon));
         default:
             break;
@@ -867,6 +871,26 @@ struct permonst *ptr;
     return i;
 }
 
+/* Monster race or type name mapping from MH_ values in monflag.h, used for glow warnings. */
+const char *
+mon_race_name(mhflag)
+unsigned mhflag;
+{
+    static const char* mrnames[] = {
+        "human", "elf", "dwarf", "gnome", "orc", "giant", "hobbit", "centaur", "illithid", "tortle",
+        "undead",
+        "lycanthrope",
+        "demon",
+        "dragon",
+        "angelic being",
+        "ogre",
+        "troll",
+        "gnoll",
+        "jabberwock"
+    };
+    return mrnames[mhflag];
+}
+
 /* for handling alternate spellings */
 struct alt_spl {
     const char *name;
@@ -1216,6 +1240,7 @@ static const short grownups[][2] = {
     { PM_BABY_GOLD_DRAGON, PM_GOLD_DRAGON },
     { PM_BABY_SEA_DRAGON, PM_SEA_DRAGON },
     { PM_BABY_YELLOW_DRAGON, PM_YELLOW_DRAGON },
+    { PM_BABY_CELESTIAL_DRAGON, PM_CELESTIAL_DRAGON },
     { PM_PSEUDODRAGON, PM_ELDER_PSEUDODRAGON },
     { PM_ELDER_PSEUDODRAGON, PM_ANCIENT_PSEUDODRAGON },
     { PM_RED_NAGA_HATCHLING, PM_RED_NAGA },
@@ -1359,13 +1384,13 @@ const char *def;
 
 /* return phrase describing the effect of fire attack on a type of monster */
 const char *
-on_fire(mptr, mattk)
-struct permonst *mptr;
-struct attack *mattk;
+on_fire(mptr, attktype)
+struct monst *mptr;
+enum on_fire_types attktype;
 {
     const char *what;
 
-    switch (monsndx(mptr)) {
+    switch (monsndx(mptr->data)) {
     case PM_FLAMING_SPHERE:
     case PM_FIRE_VORTEX:
     case PM_FIRE_ELEMENTAL:
@@ -1378,23 +1403,100 @@ struct attack *mattk;
     case PM_WATER_TROLL:
     case PM_BABY_SEA_DRAGON:
     case PM_SEA_DRAGON:
-        what = "boiling";
+    case PM_ACID_SPHERE:
+        switch (attktype) {
+        case ON_FIRE_DEAD:
+            what = (mptr == &youmonst) ? "boil away" : "boils away";
+            break;
+        case ON_FIRE_ENGULF:
+            what = "boiling away";
+            break;
+        default:
+            what = "boiling";
+            break;
+        }
         break;
     case PM_ICE_VORTEX:
+    case PM_SNOW_GOLEM:
+    case PM_ABOMINABLE_SNOWMAN:
+    case PM_FREEZING_SPHERE:
+        /* Melts and then boils away or evaporates. */    
+        switch (attktype) {
+        case ON_FIRE_DEAD:
+            what = (mptr == &youmonst) ? "melt away" : "melts away";
+            break;
+        case ON_FIRE_ENGULF:
+            what = "melting away";
+            break;
+        default:
+            what = "melting";
+            break;
+        }
+        break;
     case PM_GLASS_GOLEM:
-        what = "melting";
+    case PM_GOLD_GOLEM:
+    case PM_IRON_GOLEM:
+        /* Melts into a puddle. */
+        switch (attktype) {
+        case ON_FIRE_DEAD:
+            what = (mptr == &youmonst) ? "fully melt" : "fully melts";
+            break;
+        case ON_FIRE_ENGULF:
+            what = "melting away";
+            break;
+        default:
+            what = "melting";
+            break;
+        }
         break;
     case PM_STONE_GOLEM:
     case PM_CLAY_GOLEM:
-    case PM_GOLD_GOLEM:
-    case PM_AIR_ELEMENTAL:
     case PM_EARTH_ELEMENTAL:
+        switch (attktype) {
+        case ON_FIRE_DEAD:
+            what = (mptr == &youmonst) ? "burn to a crisp" : "burns to a crisp";
+            break;
+        case ON_FIRE_ENGULF:
+            what = "burning to a crisp";
+            break;
+        default:
+            what = "heating up";
+            break;
+        }
+        break;
+    case PM_AIR_ELEMENTAL:
     case PM_DUST_VORTEX:
     case PM_ENERGY_VORTEX:
-        what = "heating up";
+    case PM_SHOCKING_SPHERE:
+    case PM_ANTIMATTER_VORTEX:
+        /* Gas or plasma that gets cooked off. */
+        switch (attktype) {
+        case ON_FIRE_DEAD:
+            what = (mptr == &youmonst) ? "burn away" : "burns away";
+            break;
+        case ON_FIRE_ENGULF:
+            what = "burning away";
+            break;
+        default:
+            what = "heating up";
+            break;
+        }
         break;
     default:
-        what = (mattk->aatyp == AT_HUGS) ? "being roasted" : "on fire";
+        switch (attktype) {
+        case ON_FIRE_DEAD:
+            what = (mptr == &youmonst) ? "burn to a crisp" : "burns to a crisp";
+            break;
+        case ON_FIRE_ENGULF:
+            what = "burning to a crisp";
+            break;
+        case ON_FIRE_HUG:
+            what = "being roasted";
+            break;
+        default:
+            what = "on fire";
+            break;
+        }
         break;
     }
     return what;

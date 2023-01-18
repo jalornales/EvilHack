@@ -79,7 +79,7 @@ long gpflags;
                 return (is_swimmer(mdat)
                         || (!Is_waterlevel(&u.uz)
                             && (is_floater(mdat) || is_flyer(mdat)
-                                || is_clinger(mdat))));
+                                || is_clinger(mdat) || can_levitate(mtmp))));
         } else if (mdat->mlet == S_EEL && rn2(13) && !ignorewater
                    && !is_puddle(x, y)) {
             return FALSE;
@@ -95,10 +95,11 @@ long gpflags;
                         || (Upolyd && likes_lava(youmonst.data)));
             else
                 return (is_floater(mdat) || is_flyer(mdat)
-                        || likes_lava(mdat));
+                        || can_levitate(mtmp) || likes_lava(mdat));
         }
         if (is_open_air(x, y) && !ignoreair)
-            return (is_flyer(mdat) || is_floater(mdat) || is_clinger(mdat));
+            return (is_flyer(mdat) || is_floater(mdat)
+                    || is_clinger(mdat) || can_levitate(mtmp));
         if (passes_walls(mdat) && may_passwall(x, y))
             return TRUE;
         if (amorphous(mdat) && closed_door(x, y))
@@ -544,10 +545,9 @@ struct obj *scroll;
             && !wizard) {
             pline("Demonic forces prevent you from teleporting.");
             return TRUE;
-        }
-        if (is_dprince(mtmp->data) && rn2(20)
+        } else if (is_dprince(mtmp->data) && rn2(20)
             && !wizard) {
-            pline("Demonic forces prevent you from teleporting.");
+            pline("Powerful demonic forces prevent you from teleporting.");
             return TRUE;
         }
     }
@@ -803,7 +803,7 @@ boolean break_the_rules; /* True: wizard mode ^T */
         if (castit) {
             /* energy cost is deducted in spelleffects() */
             exercise(A_WIS, TRUE);
-            if (spelleffects(spell_idx(SPE_TELEPORT_AWAY), TRUE))
+            if (spelleffects(spell_idx(SPE_TELEPORT_AWAY), TRUE, FALSE))
                 return 1;
             else if (!break_the_rules)
                 return 0;
@@ -843,7 +843,8 @@ level_tele()
     if (iflags.debug_fuzzer)
         goto random_levtport;
     if ((u.uhave.amulet || In_endgame(&u.uz)
-        || In_V_tower(&u.uz) || In_sokoban(&u.uz))
+        || In_V_tower(&u.uz) || In_sokoban(&u.uz)
+        || (Is_sanctum(&u.uz) && u.uachieve.amulet))
         && !wizard) {
         You_feel("very disoriented for a moment.");
         return;
@@ -855,10 +856,9 @@ level_tele()
             && !wizard) {
             pline("Demonic forces prevent you from teleporting.");
             return;
-        }
-        if (is_dprince(mtmp->data) && rn2(20)
+        } else if (is_dprince(mtmp->data) && rn2(20)
             && !wizard) {
-            pline("Demonic forces prevent you from teleporting.");
+            pline("Powerful demonic forces prevent you from teleporting.");
             return;
         }
     }
@@ -1127,11 +1127,18 @@ level_tele()
     schedule_goto(&newlevel, FALSE, FALSE, 0, (char *) 0,
                   flags.verbose ? "You materialize on a different level!"
                                 : (char *) 0);
+#if 0   /* always wait until end of turn to change level, otherwise code
+         * that references monsters as this call stack unwinds won't be
+         * able to access them reliably; the do-the-change-now code here
+         * dates from when reading a scroll of teleportation wouldn't
+         * always make the scroll become discovered but that's no longer
+         * the case so it shouldn't be needed anymore */
 
     /* in case player just read a scroll and is about to be asked to
        call it something, we can't defer until the end of the turn */
     if (u.utotype && !context.mon_moving)
         deferred_goto();
+#endif
 }
 
 void

@@ -53,10 +53,12 @@ struct u_event {
     Bitfield(iceq_entered, 1);      /* entered the Ice Queen's realm */
     Bitfield(vecnad_entered, 1);    /* entered Vecna's domain */
     Bitfield(gtown_entered, 1);     /* entered Goblin Town */
+    Bitfield(purgatory_entered, 1); /* entered Purgatory */
     Bitfield(uhand_of_elbereth, 3); /* became Hand of Elbereth */
     Bitfield(ucerberus, 1);         /* killed Cerberus */
     Bitfield(uvecna, 1);            /* killed Vecna */
     Bitfield(ugking, 1);            /* killed the Goblin King */
+    Bitfield(ulucifer, 1);          /* killed Lucifer */
     Bitfield(udemigod, 1);          /* killed the wiz */
     Bitfield(ascended, 1);          /* has offered the Amulet */
     Bitfield(ulearned_elbereth, 1); /* learned how to write Elbereth */
@@ -69,6 +71,8 @@ struct u_achieve {
     Bitfield(menorah, 1); /* touched Candelabrum */
     Bitfield(enter_gehennom,
              1);           /* entered Gehennom by any means */
+    Bitfield(enter_purgatory,
+             1);           /* entered Purgatory by any means */
     Bitfield(ascended, 1); /* not quite the same as u.uevent.ascended */
     Bitfield(mines_luckstone, 1); /* got a luckstone at end of mines */
     Bitfield(finish_sokoban, 1);  /* obtained the sokoban prize */
@@ -78,6 +82,7 @@ struct u_achieve {
     Bitfield(killed_cerberus, 1);
     Bitfield(killed_vecna, 1);
     Bitfield(killed_gking, 1);
+    Bitfield(killed_lucifer, 1);
 
     Bitfield(vibrating_square, 1); /* stepped on "vibrating square" */
 };
@@ -146,11 +151,11 @@ struct Role {
     /*** Bitmasks ***/
     long mhrace;
     short allow;                  /* bit mask of allowed variations */
-#define ROLE_GENDMASK  0xf000     /* allowable genders */
-#define ROLE_MALE      0x2000
-#define ROLE_FEMALE    0x4000
-#define ROLE_NEUTER    0x8000
 #define ROLE_NORACEALIGN 0x0100   /* ignore racial alignment for role (Con) */
+#define ROLE_GENDMASK    0xf000   /* allowable genders */
+#define ROLE_MALE        0x1000
+#define ROLE_FEMALE      0x2000
+#define ROLE_NEUTER      0x4000
 #define ROLE_ALIGNMASK AM_MASK    /* allowable alignments */
 #define ROLE_LAWFUL    AM_LAWFUL
 #define ROLE_NEUTRAL   AM_NEUTRAL

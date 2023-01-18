@@ -68,6 +68,13 @@ enum m_ap_types {
 #define M_AP_TYPE(m) ((m)->m_ap_type & M_AP_TYPMASK)
 #define M_AP_FLAG(m) ((m)->m_ap_type & ~M_AP_TYPMASK)
 
+/* for saving the hero's rank in bones monster */
+struct mon_former_rank {
+    int lev;
+    short mnum;
+    boolean female;
+};
+
 struct monst {
     struct monst *nmon;
     struct permonst *data;
@@ -158,15 +165,21 @@ struct monst {
     Bitfield(iscerberus, 1); /* is Cerberus */
     Bitfield(isvecna, 1);    /* is Vecna */
     Bitfield(isgking, 1);    /* is the Goblin King */
+    Bitfield(islucifer, 1);  /* is Lucifer */
     Bitfield(iswiz, 1);      /* is the Wizard of Yendor */
     Bitfield(wormno, 5);     /* at most 31 worms on any level */
     Bitfield(mwither_from_u, 1); /* is withering due to player */
 
     Bitfield(mstonebyu, 1);  /* you caused the monster to start stoning */
     Bitfield(mstone, 3);     /* monster is turning to stone */
-    /* 3 free bits */
+    Bitfield(mberserk, 1);   /* monster is berserk */
+    /* 1 free bit */
 
     uchar mwither;           /* withering; amount of turns left till recovery */
+    uchar vuln_fire;         /* timeout of temp vulnerability to fire */
+    uchar vuln_cold;         /* ...to cold */
+    uchar vuln_elec;         /* ...to elec */
+    uchar vuln_acid;         /* ...to acid */
 #define MAX_NUM_WORMS 32    /* should be 2^(wormno bitfield size) */
 
     unsigned long mstrategy; /* for monsters with mflag3: current strategy */
@@ -200,8 +213,6 @@ struct monst {
     long misc_worn_check;  /* mon's wornmask */
     xchar weapon_check;    /* flag for whether to try switching weapons */
 
-    char former_rank[25];  /* for bones' ghost rank in their former life */
-
     int meating;           /* monster is eating timeout */
     int msummoned;         /* is a temporarily summoned being */
     int msicktime;         /* zombie sick timer */
@@ -209,6 +220,7 @@ struct monst {
     int mreflecttime;      /* timeout for monster reflection spell */
     uchar mprotection;     /* monster protection spell */
     uchar mprottime;       /* timeout for monster protection spell */
+    struct mon_former_rank former_rank; /* for monsters in bones */
     struct mextra *mextra; /* point to mextra struct */
 };
 
@@ -243,11 +255,12 @@ struct monst {
 /* mimic appearances that block vision/light */
 #define is_lightblocker_mappear(mon)                       \
     (is_obj_mappear(mon, BOULDER)                          \
-     || (M_AP_TYPE(mon) == M_AP_FURNITURE                    \
+     || (M_AP_TYPE(mon) == M_AP_FURNITURE                  \
          && ((mon)->mappearance == S_hcdoor                \
              || (mon)->mappearance == S_vcdoor             \
              || (mon)->mappearance < S_ndoor /* = walls */ \
-             || (mon)->mappearance == S_tree)))
+             || (mon)->mappearance == S_tree               \
+             || (mon)->mappearance == S_deadtree)))
 #define is_door_mappear(mon) (M_AP_TYPE(mon) == M_AP_FURNITURE   \
                               && ((mon)->mappearance == S_hcdoor \
                                   || (mon)->mappearance == S_vcdoor))

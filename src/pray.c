@@ -817,20 +817,23 @@ gcrownu()
     if (!rn2(10) && !Role_if(PM_INFIDEL))
         HSick_resistance |= FROMOUTSIDE;
     incr_resistance(&HFire_resistance, 100);
-    if (u.ualign.type != A_NONE) {
+    if (!Role_if(PM_INFIDEL)) {
         /* demons don't get all the intrinsics */
         incr_resistance(&HCold_resistance, 100);
         incr_resistance(&HShock_resistance, 100);
         incr_resistance(&HSleep_resistance, 100);
     }
     incr_resistance(&HPoison_resistance, 100);
-    if (u.ualign.type == A_NONE) {
+    if (Role_if(PM_INFIDEL)) {
         HSick_resistance |= FROMRACE;
         if (Race_if(PM_ILLITHID)) /* demons don't have the correct brain structure */
             HPsychic_resistance &= ~INTRINSIC;
+        if (Race_if(PM_CENTAUR)) /* demons don't have four legs */
+            EJumping &= ~INTRINSIC;
     }
-    if (u.ualign.type != A_NONE)
-        monstseesu(M_SEEN_FIRE | M_SEEN_COLD | M_SEEN_ELEC | M_SEEN_SLEEP | M_SEEN_POISON);
+    if (!Role_if(PM_INFIDEL))
+        monstseesu(M_SEEN_FIRE | M_SEEN_COLD | M_SEEN_ELEC
+                   | M_SEEN_SLEEP | M_SEEN_POISON);
     else
         monstseesu(M_SEEN_FIRE | M_SEEN_POISON);
     godvoice(u.ualign.type, (char *) 0);
@@ -904,24 +907,27 @@ gcrownu()
         break;
     case A_NONE:
         u.uevent.uhand_of_elbereth = 4;
-        verbalize("Thou shalt be my vassal of suffering and terror!");
-        livelog_printf(LL_DIVINEGIFT, "became the Emissary of Moloch");
-        class_gift = SPE_FIREBALL; /* no special weapon */
-        unrestrict_weapon_skill(P_TRIDENT);
-        P_MAX_SKILL(P_TRIDENT) = P_EXPERT;
-        if (Upolyd)
-            rehumanize(); /* return to human/orcish form -- not a demon yet */
-        pline1("Wings sprout from your back and you grow a barbed tail!");
-        maxint = urace.attrmax[A_INT];
-        maxwis = urace.attrmax[A_WIS];
-        urace = race_demon;
-        /* mental faculties are not changed by demonization */
-        urace.attrmax[A_INT] = maxint;
-        urace.attrmax[A_WIS] = maxwis;
-        youmonst.data->msize = MZ_HUMAN; /* in case we started out as a giant */
-        set_uasmon();
-        retouch_equipment(2); /* silver */
-        break;
+        if (Role_if(PM_INFIDEL)) {
+            verbalize("Thou shalt be my vassal of suffering and terror!");
+            livelog_printf(LL_DIVINEGIFT, "became the Emissary of Moloch");
+            class_gift = SPE_FIREBALL; /* no special weapon */
+            unrestrict_weapon_skill(P_TRIDENT);
+            P_MAX_SKILL(P_TRIDENT) = P_EXPERT;
+            if (Upolyd)
+                rehumanize(); /* return to human/orcish form -- not a demon yet */
+            pline1("Wings sprout from your back and you grow a barbed tail!");
+            maxint = urace.attrmax[A_INT];
+            maxwis = urace.attrmax[A_WIS];
+            urace = race_demon;
+            /* mental faculties are not changed by demonization */
+            urace.attrmax[A_INT] = maxint;
+            urace.attrmax[A_WIS] = maxwis;
+            youmonst.data->msize = MZ_HUMAN; /* in case we started out as a giant */
+            set_uasmon();
+            newsym(u.ux, u.uy);
+            retouch_equipment(2); /* silver */
+            break;
+        }
     }
 
     if (objects[class_gift].oc_class == SPBOOK_CLASS) {
@@ -1636,16 +1642,18 @@ dosacrifice()
     }
 
     if (otmp->otyp == CORPSE) {
-        register struct permonst *ptr;
+        struct permonst *ptr;
+        struct monst *mtmp;
+        boolean to_other_god;
+
         if (has_omonst(otmp) && has_erac(OMONST(otmp))) {
             ptr = &mons[ERAC(OMONST(otmp))->rmnum];
         } else {
             ptr = &mons[otmp->corpsenm];
         }
-        struct monst *mtmp;
         /* is this a conversion attempt? */
-        boolean to_other_god =  ugod_is_angry() && !your_race(ptr)
-                                && u.ualign.type != altaralign;
+        to_other_god = (ugod_is_angry() && !your_race(ptr)
+                        && u.ualign.type != altaralign);
 
         /* KMH, conduct */
         if (!u.uconduct.gnostic++)
@@ -1897,7 +1905,6 @@ dosacrifice()
                     /* Infidels still have an ascension run,
                      * they just carry a different McGuffin */
                     u.uevent.ascended = 0;
-                    u.uachieve.amulet = 1;
                     otmp = find_quest_artifact(1 << OBJ_INVENT);
                     godvoice(A_NONE, (char *) 0);
                     if (!otmp)
@@ -1915,8 +1922,11 @@ dosacrifice()
                         You_feel("strange energies envelop %s.",
                                  the(xname(otmp)));
                         otmp->spe = 1;
-                        if (otmp->where == OBJ_INVENT)
+                        if (otmp->where == OBJ_INVENT) {
                             u.uhave.amulet = 1;
+                            u.uachieve.amulet = 1;
+                            mkgate();
+                        }
                         livelog_write_string(LL_ACHIEVE, "imbued the Idol of Moloch");
                     }
                     return 1;
@@ -2217,7 +2227,8 @@ dosacrifice()
 
                             /* apply starting inventory subs - so we'll get racial gear if possible */
                             if (urace.malenum != PM_HUMAN) {
-                                for (int i = 0; inv_subs[i].race_pm != NON_PM; ++i) {
+                                int i;
+                                for (i = 0; inv_subs[i].race_pm != NON_PM; ++i) {
                                     if (inv_subs[i].race_pm == urace.malenum
                                         && typ == inv_subs[i].item_otyp) {
                                         typ = inv_subs[i].subs_otyp;
@@ -2236,6 +2247,7 @@ dosacrifice()
                             else if (is_orcish_obj(otmp) && !Race_if(PM_ORC))
                                 typ = 0;
 
+                            obfree(otmp, (struct obj *) 0);
                             otmp = (struct obj *) 0;
 
                             if (typ && !P_RESTRICTED(objects[typ].oc_skill))
@@ -2379,7 +2391,8 @@ dosacrifice()
                              * racial gear if possible
                              */
                             if (urace.malenum != PM_HUMAN) {
-                                for (int i = 0; inv_subs[i].race_pm != NON_PM; ++i) {
+                                int i;
+                                for (i = 0; inv_subs[i].race_pm != NON_PM; ++i) {
                                     if (inv_subs[i].race_pm == urace.malenum
                                         && typ == inv_subs[i].item_otyp) {
                                         typ = inv_subs[i].subs_otyp;
@@ -2402,6 +2415,7 @@ dosacrifice()
                             else if (otmp->otyp == HELM_OF_OPPOSITE_ALIGNMENT)
                                 typ = 0;
 
+                            obfree(otmp, (struct obj *) 0);
                             otmp = (struct obj *) 0;
 
                         } while (ncount++ < 1000 && !typ);
@@ -2410,27 +2424,15 @@ dosacrifice()
                     if (typ) {
                         ncount = 0;
                         otmp = mksobj(typ, FALSE, FALSE);
-                        if (Race_if(PM_ELF)) {
-                            while (otmp->material == IRON && ncount++ < 500) {
-                                otmp = mksobj(typ, FALSE, FALSE);
-                                /* keep trying for non-iron */
-                            }
-                        }
-
-                        if (Race_if(PM_ORC)) {
-                            while (otmp->material == MITHRIL
-                                   && ncount++ < 500) {
-                                otmp = mksobj(typ, FALSE, FALSE);
-                                /* keep trying for non-mithril */
-                            }
-                        }
-
-                        if (Role_if(PM_INFIDEL)) {
-                            while (otmp->material == SILVER
-                                   && ncount++ < 500) {
-                                otmp = mksobj(typ, FALSE, FALSE);
-                                /* keep trying for non-silver */
-                            }
+                        while (((Race_if(PM_ELF) && otmp->material == IRON)
+                                || (Race_if(PM_ORC)
+                                    && otmp->material == MITHRIL)
+                                || (Role_if(PM_INFIDEL)
+                                    && otmp->material == SILVER))
+                               && ncount++ < 500) {
+                            obfree(otmp, (struct obj *) 0);
+                            otmp = mksobj(typ, FALSE, FALSE);
+                            /* keep trying for non-iron */
                         }
 
                         if (otmp) {
@@ -2716,7 +2718,7 @@ doturn()
     if (!Role_if(PM_PRIEST) && !Role_if(PM_KNIGHT)) {
         /* Try to use the "turn undead" spell. */
         if (known_spell(SPE_TURN_UNDEAD))
-            return spelleffects(spell_idx(SPE_TURN_UNDEAD), FALSE);
+            return spelleffects(spell_idx(SPE_TURN_UNDEAD), FALSE, FALSE);
         You("don't know how to turn undead!");
         return 0;
     }

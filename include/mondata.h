@@ -42,6 +42,8 @@
     ((mon_resistancebits(mon) & MR2_DISPLACED) != 0)
 #define has_reflection(mon) \
     ((mon_resistancebits(mon) & MR2_REFLECTION) != 0)
+#define can_levitate(mon) \
+    ((mon_resistancebits(mon) & MR2_LEVITATE) != 0)
 
 #define resists_sick(ptr) \
     ((ptr)->mlet == S_FUNGUS || nonliving(ptr)                                   \
@@ -68,9 +70,11 @@
 
 /* is_vampshifter(mon) in handled explicitly in zap.c */
 #define immune_death_magic(ptr) \
-    (nonliving(ptr) || is_demon(ptr) || is_angel(ptr)             \
-     || (ptr)->msound == MS_LEADER || (ptr) == &mons[PM_CERBERUS] \
-     || (ptr) == &mons[PM_DEATH])
+    (dmgtype((ptr), AD_DETH)                                                 \
+     || nonliving(ptr) || is_demon(ptr) || is_angel(ptr)                     \
+     || (ptr)->msound == MS_LEADER || (ptr) == &mons[PM_CERBERUS]            \
+     || (ptr) == &mons[PM_DEATH] || (ptr) == &mons[PM_BABY_CELESTIAL_DRAGON] \
+     || (ptr) == &mons[PM_CELESTIAL_DRAGON])
 
 #define immune_poisongas(ptr) ((ptr) == &mons[PM_HEZROU])
 
@@ -82,13 +86,15 @@
 #define is_flyer(ptr) (((ptr)->mflags1 & M1_FLY) != 0L)
 /* humanoid shape with big wings (flight blocked by most body armor) */
 #define big_wings(ptr) \
-    ((ptr) == &mons[PM_WINGED_GARGOYLE] || (ptr) == &mons[PM_DEMON]      \
-     || (ptr) == &mons[PM_SUCCUBUS] || (ptr) == &mons[PM_INCUBUS]        \
-     || (ptr) == &mons[PM_HORNED_DEVIL] || (ptr) == &mons[PM_ERINYS]     \
-     || (ptr) == &mons[PM_VROCK] || (ptr) == &mons[PM_PIT_FIEND]         \
-     || (ptr) == &mons[PM_BALROG] || (ptr) == &mons[PM_ANGEL]            \
-     || (ptr) == &mons[PM_ARCHANGEL] || (ptr) == &mons[PM_ARCHON])
-#define is_floater(ptr) ((ptr)->mlet == S_EYE || (ptr)->mlet == S_LIGHT)
+    ((ptr) == &mons[PM_WINGED_GARGOYLE] || (ptr) == &mons[PM_DEMON]  \
+     || (ptr) == &mons[PM_SUCCUBUS] || (ptr) == &mons[PM_INCUBUS]    \
+     || (ptr) == &mons[PM_HORNED_DEVIL] || (ptr) == &mons[PM_ERINYS] \
+     || (ptr) == &mons[PM_VROCK] || (ptr) == &mons[PM_PIT_FIEND]     \
+     || (ptr) == &mons[PM_BALROG] || (ptr) == &mons[PM_ANGEL]        \
+     || (ptr) == &mons[PM_ARCHANGEL] || (ptr) == &mons[PM_ARCHON]    \
+     || (ptr) == &mons[PM_LUCIFER])
+#define is_floater(ptr) \
+    ((ptr)->mlet == S_EYE || (ptr)->mlet == S_LIGHT)
 /* clinger: piercers, mimics, wumpus -- generally don't fall down holes */
 #define is_clinger(ptr) (((ptr)->mflags1 & M1_CLING) != 0L)
 #define grounded(ptr) (!is_flyer(ptr) && !is_floater(ptr) && !is_clinger(ptr))
@@ -184,6 +190,7 @@
     ((ptr)->mlet == S_MUMMY || (ptr)->mlet == S_ZOMBIE          \
      || (ptr)->mlet == S_WRAITH || (ptr)->mlet == S_VAMPIRE)
 #define is_armed(ptr) attacktype(ptr, AT_WEAP)
+#define can_sting(ptr) attacktype(ptr, AT_STNG)
 #define acidic(ptr) (((ptr)->mflags1 & M1_ACID) != 0L)
 #define poisonous(ptr) (((ptr)->mflags1 & M1_POIS) != 0L)
 #define carnivorous(ptr) (((ptr)->mflags1 & M1_CARNIVORE) != 0L)
@@ -276,13 +283,6 @@
                          || ((ptr)->mlet == S_HUMANOID && !is_illithid(ptr)) \
                          || (ptr)->mlet == S_GNOME || (ptr)->mlet == S_ORC   \
                          || (ptr)->mlet == S_GIANT))
-#define is_bones_monster(ptr) \
-    ((ptr) == &mons[PM_GHOST] || (ptr) == &mons[PM_GHOUL]                 \
-     || (ptr) == &mons[PM_SPECTRE] || (ptr) == &mons[PM_VAMPIRE]          \
-     || (ptr) == &mons[PM_VAMPIRE_MAGE] || (ptr) == &mons[PM_WRAITH]      \
-     || (ptr)->mlet == S_MUMMY || is_zombie(ptr)                          \
-     || (ptr) == &mons[PM_BARROW_WIGHT] || (ptr) == &mons[PM_GREEN_SLIME] \
-     || (ptr) == &mons[PM_MIND_FLAYER] || (ptr) == &mons[PM_REVENANT])
 #define is_domestic(ptr) (((ptr)->mflags2 & M2_DOMESTIC) != 0L)
 #define is_demon(ptr) \
     ((((ptr)->mhflags & MH_DEMON) != 0L) \
@@ -293,7 +293,9 @@
      || (ptr) == &mons[PM_ELDER_PSEUDODRAGON] || (ptr) == &mons[PM_ANCIENT_PSEUDODRAGON])
 #define is_angel(ptr) (((ptr)->mhflags & MH_ANGEL) != 0L)
 #define is_mercenary(ptr) (((ptr)->mflags2 & M2_MERC) != 0L)
-#define is_rogue(ptr) ((ptr) == &mons[PM_ROGUE] || (ptr) == &mons[PM_HOBBIT_PICKPOCKET])
+#define is_rogue(ptr) \
+    ((ptr) == &mons[PM_ROGUE] \
+     || (ptr) == &mons[PM_HOBBIT_PICKPOCKET] || (ptr) == &mons[PM_GOLLUM])
 #define is_male(ptr) (((ptr)->mflags2 & M2_MALE) != 0L)
 #define is_female(ptr) (((ptr)->mflags2 & M2_FEMALE) != 0L)
 #define is_neuter(ptr) (((ptr)->mflags2 & M2_NEUTER) != 0L)
@@ -401,8 +403,16 @@
      || (ptr) == &mons[PM_REVENANT] || (ptr) == &mons[PM_BABY_OWLBEAR]            \
      || (ptr) == &mons[PM_HUMAN_ZOMBIE] || (ptr) == &mons[PM_GIANT_ZOMBIE]        \
      || (ptr) == &mons[PM_LICH])
+/* Goblin Town branch defines */
 #define likes_gtown(ptr) \
     ((ptr)->mlet == S_ORC || (ptr)->mlet == S_KOBOLD || is_rat(ptr))
+/* Purgatory defines */
+#define likes_purg(ptr) \
+    ((ptr)->mlet == S_DRAGON || (ptr)->mlet == S_NYMPH                 \
+     || (ptr)->mlet == S_UNICORN || (ptr)->mlet == S_CENTAUR           \
+     || (ptr)->mlet == S_JABBERWOCK || (ptr)->mlet == S_NYMPH          \
+     || ((ptr) >= &mons[PM_ARCHEOLOGIST] && (ptr) <= &mons[PM_WIZARD]) \
+     || (ptr) == &mons[PM_SPECTRE] || (ptr) == &mons[PM_GHOST])
 
 /* macros for various monsters affected by specific types of damage */
 #define can_vaporize(ptr) \
@@ -415,6 +425,13 @@
 
 #define can_corrode(ptr) \
     ((ptr) == &mons[PM_IRON_GOLEM] || (ptr) == &mons[PM_IRON_PIERCER])
+
+/* various monsters move faster underwater vs on land */
+#define is_fast_underwater(ptr) \
+    (is_tortle(ptr) || (ptr) == &mons[PM_WATER_TROLL]                        \
+     || (ptr) == &mons[PM_GIANT_TURTLE] || (ptr) == &mons[PM_BABY_CROCODILE] \
+     || (ptr) == &mons[PM_CROCODILE] || (ptr) == &mons[PM_GIANT_CROCODILE]   \
+     || (ptr) == &mons[PM_BABY_SEA_DRAGON] || (ptr) == &mons[PM_SEA_DRAGON])
 
 /* return TRUE if the monster tends to revive */
 #define is_reviver(ptr) (is_rider(ptr) || (ptr)->mlet == S_TROLL \
@@ -430,14 +447,17 @@
 /* this returns the light's range, or 0 if none; if we add more light emitting
    monsters, we'll likely have to add a new light range field to mons[] */
 #define emits_light(ptr) \
-    (((ptr)->mlet == S_LIGHT || (ptr) == &mons[PM_FLAMING_SPHERE] \
-      || (ptr) == &mons[PM_SHOCKING_SPHERE]                       \
-      || (ptr) == &mons[PM_BABY_GOLD_DRAGON]                      \
-      || (ptr) == &mons[PM_FIRE_VORTEX])                          \
-         ? 1                                                      \
-         : ((ptr) == &mons[PM_FIRE_ELEMENTAL]                     \
-            || (ptr) == &mons[PM_GOLD_DRAGON]                     \
-            || (ptr) == &mons[PM_TIAMAT]) ? 2 : 0)
+    (((ptr)->mlet == S_LIGHT                       \
+      || (ptr) == &mons[PM_FLAMING_SPHERE]         \
+      || (ptr) == &mons[PM_SHOCKING_SPHERE]        \
+      || (ptr) == &mons[PM_BABY_GOLD_DRAGON]       \
+      || (ptr) == &mons[PM_FIRE_VORTEX])           \
+         ? 1                                       \
+         : ((ptr) == &mons[PM_FIRE_ELEMENTAL]      \
+            || (ptr) == &mons[PM_GOLD_DRAGON]      \
+            || (ptr) == &mons[PM_TIAMAT])          \
+           ? 2                                     \
+           : ((ptr) == &mons[PM_LUCIFER]) ? 3 : 0)
     /* [Note: the light ranges above were reduced to 1 for performance,
      *  otherwise screen updating on the plane of fire slowed to a crawl.
      *  Note too: that was with 1990s hardware and before fumarole smoke
@@ -546,5 +566,8 @@
      || (ptr) == &mons[PM_BOURBON] || (ptr) == &mons[PM_OZZY])
 
 #define is_racialmon(ptr) (is_mplayer(ptr) || is_mercenary(ptr))
+
+#define M_IN_WATER(ptr) \
+    ((ptr)->mlet == S_EEL || amphibious(ptr) || is_swimmer(ptr))
 
 #endif /* MONDATA_H */

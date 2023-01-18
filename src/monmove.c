@@ -158,7 +158,8 @@ struct monst *mtmp;
         || is_mplayer(mtmp->data) || is_rider(mtmp->data) || mtmp->isvecna
         || mtmp->data->mlet == S_HUMAN || unique_corpstat(mtmp->data)
         || (mtmp->isshk && inhishop(mtmp)) || mtmp->isgking
-        || (mtmp->ispriest && inhistemple(mtmp)))
+        || (mtmp->ispriest && inhistemple(mtmp))
+        || mtmp->mberserk)
         return FALSE;
 
     /* <0,0> is used by musical scaring to check for the above;
@@ -499,9 +500,18 @@ register struct monst *mtmp;
         if (Hallucination)
             newsym(mtmp->mx, mtmp->my);
         if (mtmp->mcanmove && (mtmp->mstrategy & STRAT_CLOSE)
-            && !mtmp->msleeping && monnear(mtmp, u.ux, u.uy))
-            quest_talk(mtmp); /* give the leaders a chance to speak */
-        return 0;             /* other frozen monsters can't do anything */
+            && !mtmp->msleeping && monnear(mtmp, u.ux, u.uy)) {
+            if (mtmp->data == &mons[PM_LUCIFER]) {
+                if (Role_if(PM_INFIDEL))
+                    com_pager(401);
+                else
+                    com_pager(400);
+                mtmp->mstrategy &= ~STRAT_WAITMASK;
+            } else {
+                quest_talk(mtmp); /* give the leaders a chance to speak */
+            }
+        }
+        return 0; /* other frozen monsters can't do anything */
     }
 
     /* there is a chance we will wake it */
@@ -554,7 +564,7 @@ register struct monst *mtmp;
     if (mwalk_sewage) {
         if (is_flyer(mdat) || is_floater(mdat)
             || is_clinger(mdat) || is_swimmer(mdat)
-            || passes_walls(mdat)) {
+            || passes_walls(mdat) || can_levitate(mtmp)) {
             mwalk_sewage = FALSE;
         } else {
             mon_adjust_speed(mtmp, -2, (struct obj *) 0);
@@ -565,7 +575,7 @@ register struct monst *mtmp;
 
     /* being in midair where gravity is still in effect can be lethal */
     if (is_open_air(mtmp->mx, mtmp->my)
-        && !(is_flyer(mdat) || is_floater(mdat)
+        && !(is_flyer(mdat) || is_floater(mdat) || can_levitate(mtmp)
              || is_clinger(mdat) || ((mtmp == u.usteed) && Flying))) {
         if (canseemon(mtmp))
             pline("%s plummets several thousand feet to %s death.",
@@ -924,6 +934,19 @@ toofar:
         && mtmp->data == &mons[PM_KATHRYN_THE_ENCHANTRESS]
         && couldsee(mtmp->mx, mtmp->my) && !mtmp->minvis && !rn2(5))
         cuss(mtmp);
+    /* players monsters in Purgatory */
+    if (Inpurg && (distu(mtmp->mx, mtmp->my) <= 15)
+        && is_mplayer(mtmp->data) && !mtmp->mpeaceful
+        && couldsee(mtmp->mx, mtmp->my)
+        && !mtmp->minvis && !rn2(5))
+        mplayer_purg_talk(mtmp);
+    /* Saint Michael the Archangel in Purgatory */
+    if (Inpurg && (distu(mtmp->mx, mtmp->my) <= 15)
+        && mtmp->data == &mons[PM_ARCHANGEL]
+        && !mtmp->mpeaceful
+        && couldsee(mtmp->mx, mtmp->my)
+        && !mtmp->minvis && !rn2(5))
+        archangel_purg_talk(mtmp);
 
     /* note: can't get here when tmp==2 so this always returns 0 */
     return (tmp == 2);
@@ -1049,12 +1072,12 @@ register struct obj *container;
     if (container->olocked && !can_unlock)
         return FALSE;
 
-    likegold = (likes_gold(mtmp->data) && pctload < 95);
-    likegems = (likes_gems(mtmp->data) && pctload < 85);
+    likegold = (likes_gold(mtmp->data) && pctload < 95 && !can_levitate(mtmp));
+    likegems = (likes_gems(mtmp->data) && pctload < 85 && !can_levitate(mtmp));
     uses_items = (!mindless(mtmp->data) && !is_animal(mtmp->data)
                   && pctload < 75);
-    likeobjs = (likes_objs(mtmp->data) && pctload < 75);
-    likemagic = (likes_magic(mtmp->data) && pctload < 85);
+    likeobjs = (likes_objs(mtmp->data) && pctload < 75 && !can_levitate(mtmp));
+    likemagic = (likes_magic(mtmp->data) && pctload < 85 && !can_levitate(mtmp));
 
     if (!likegold && !likegems && !uses_items && !likeobjs && !likemagic)
         return FALSE;
@@ -1259,7 +1282,8 @@ register int after;
     appr = mtmp->mflee ? -1 : 1;
    /* does this monster like to play keep-away? */
     if (is_skittish(ptr)
-        && (dist2(omx, omy, gx, gy) < 10))
+        && (dist2(omx, omy, gx, gy) < 10)
+        && !mtmp->mberserk)
         appr = -1;
     if (mtmp->mconf || (u.uswallow && mtmp == u.ustuck)) {
         appr = 0;
@@ -1296,6 +1320,10 @@ register int after;
             && m_canseeu(mtmp) && m_has_launcher_and_ammo(mtmp))
             appr = -1;
 
+        /* ... unless they are currently berserk */
+        if (mtmp->mberserk)
+            appr = 1;
+
         if (monsndx(ptr) == PM_AGENT && mon_has_amulet(mtmp))
             appr = -1; /* objective secured, retreat */
 
@@ -1324,12 +1352,13 @@ register int after;
                 (curr_mon_load(mtmp) * 100) / max_mon_load(mtmp);
 
             /* look for gold or jewels nearby */
-            likegold = (likes_gold(ptr) && pctload < 95);
-            likegems = (likes_gems(ptr) && pctload < 85);
+            likegold = (likes_gold(ptr) && pctload < 95 && !can_levitate(mtmp));
+            likegems = (likes_gems(ptr) && pctload < 85 && !can_levitate(mtmp));
             uses_items = (!mindless(ptr) && !is_animal(ptr) && pctload < 75);
-            likeobjs = (likes_objs(ptr) && pctload < 75);
-            likemagic = (likes_magic(ptr) && pctload < 85);
-            likerock = (racial_throws_rocks(mtmp) && pctload < 50 && !Sokoban);
+            likeobjs = (likes_objs(ptr) && pctload < 75 && !can_levitate(mtmp));
+            likemagic = (likes_magic(ptr) && pctload < 85 && !can_levitate(mtmp));
+            likerock = (racial_throws_rocks(mtmp) && pctload < 50 && !Sokoban
+                        && !can_levitate(mtmp));
             conceals = hides_under(ptr);
             setlikes = TRUE;
         }
@@ -1393,7 +1422,7 @@ register int after;
                        is in effect */
                     if (is_open_air(xx, yy)
                         && !(is_flyer(ptr) || is_floater(ptr)
-                             || is_clinger(ptr)))
+                             || is_clinger(ptr) || can_levitate(mtmp)))
                         continue;
 
                     /* ignore sokoban prizes */
@@ -1814,13 +1843,14 @@ register int after;
                 int pctload = (curr_mon_load(mtmp) * 100) / max_mon_load(mtmp);
 
                 /* look for gold or jewels nearby */
-                likegold = (likes_gold(ptr) && pctload < 95);
-                likegems = (likes_gems(ptr) && pctload < 85);
+                likegold = (likes_gold(ptr) && pctload < 95 && !can_levitate(mtmp));
+                likegems = (likes_gems(ptr) && pctload < 85 && !can_levitate(mtmp));
                 uses_items =
                     (!mindless(ptr) && !is_animal(ptr) && pctload < 75);
-                likeobjs = (likes_objs(ptr) && pctload < 75);
-                likemagic = (likes_magic(ptr) && pctload < 85);
-                likerock = (racial_throws_rocks(mtmp) && pctload < 50 && !Sokoban);
+                likeobjs = (likes_objs(ptr) && pctload < 75 && !can_levitate(mtmp));
+                likemagic = (likes_magic(ptr) && pctload < 85 && !can_levitate(mtmp));
+                likerock = (racial_throws_rocks(mtmp) && pctload < 50 && !Sokoban
+                            && !can_levitate(mtmp));
                 conceals = hides_under(ptr);
             }
 
@@ -1842,6 +1872,12 @@ register int after;
             /* Maybe a honey badger raided a beehive */
             if (ptr == &mons[PM_HONEY_BADGER]) {
                 if (meatjelly(mtmp) == 2)
+                    return 2; /* it died */
+            }
+
+            /* Maybe Gollum had a snack */
+            if (ptr == &mons[PM_GOLLUM]) {
+                if (gollum_eat(mtmp) == 2)
                     return 2; /* it died */
             }
 

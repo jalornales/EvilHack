@@ -2392,4 +2392,246 @@ The following changes to date are:
 - Fix: very small monsters (and players) vs shallow water/sewage
 - Fix: poisonous corpse can give conflicting message (issue #95)
 - Fix: remove unnecessary feedback when a monster goes berserk
+- Fix: any artifacts can glow to warn of specific monsters
+- Adjust feedback when hit by an artifact or weapon that deals poison
+  damage
+
+
+### Version 0.8.1
+
+- Latest merges from 'vanilla' NetHack 3.6.6 official release (as of January 23rd, 2022)
+- Initial preparation for new version (0.8.1)
+- Fix: fire damage feedback
+- Retool berserkers
+- Make berserkers more willing to fight hand-to-hand
+- Fix: compatability checking for development
+- Add missing wizard mode commands to guidebook
+- Fix: a couple minor issues with character creation
+- Unlock trident skill for tortles playing a role that normally wouldn't have it
+- Tortles, various monsters can move fast whilst underwater
+- Fix: tortles and breathing underwater
+- Fix: You are very fast from something
+- Fix: sections of wall being visible when they shouldn't yet
+- Fix: triggering knockback feedback on an already dead monster
+- Sickness countdown
+- Valkyries start with a spear instead of a long sword; Giantslayer changes
+- Grid bugs don't have hands
+- Pyrolisk, fire damage changes
+- Mimics and dead trees
+- Fix: typo in 'The Adventurer's Journal'
+- Kathryn grudges all things that can sting
+- Fix: warnings during compile using gcc version 11
+- Make hitting with a wielded potion hit you far less
+- Fix: engulfing mounted hero
+- Adjust random item artifact chances
+- Monsters will use teleportation wands offensively
+- Change kitchen sink glyph and color
+- Adjust random item artifact chances again
+- Monsters can blind you with a camera
+- Monsters will use wands of slow monster offensively
+- Allow normal sight whilst underwater given the right conditions
+- Fix: paranoid swim and wearing white dragon-scaled armor
+- Fix: See_underwater as a tortle when saving/reloading, hidden
+  monsters underwater
+- Fix: better way to handle hidden monsters underwater; new hints file
+- Minor README update
+- Fix: ammo damage from the Longbow of Diana/Crossbow of Carl
+- Fix: silence several compile warnings (clang)
+- Fix: corrections to last commit (silencing compile warnings w/ clang)
+- Fix: move check for starting L1 spellbook to include non-random spellbooks
+- Fix: lit status of worn light sources appearing twice in inventory
+- Fix: could not blind self with an expensive camera
+- Monsters can use rings/boots of levitation
+- To-hit calculation on the bottom line
+- Magic negation (MC) value on the bottom line
+- Fix: MC and to-hit status not appearing in dumplog
+- Allow looting of containers that are in water
+- New object: goggles
+- Fix: quirk with underwater vision
+- Revamp monsters eating containers
+- Fix: tipping into containers
+- Resurrecting named pets will show their name once resurrected
+- Fix: force-fight 'unknown obstacle' descriptions
+- Fix: to-hit display weirdness under certain conditions
+- Fix: to-hit display revealing weapon enchantment, other tweaks
+- Fix: impossible from splitting named stack on bill
+- Physical knockback attack doesn't affect unsolid monsters
+- Weapon familiarity
+- Better way to suppress weapon enchantment on to-hit display, include
+  rings of increase accuracy
+- Fix: exploiting artifact name rejection
+- Fix: unique monster doppelganger and bones bug
+- Better way of handling livelogging of destroying a player's ghost
+- Goblin Town expansion: Gollum's Cave
+- Adjust Graz'zt's magic resistance
+- Sanctum/ascension run revamp: part 1 (sanctum)
+- Feedback for gate forming when u.uachieve.amulet is triggered
+- Sanctum/ascension run revamp: part 2 (Track Lucifer alive/dead
+  status, foundation for Purgatory levels)
+- Lucifer tweaks
+- Fix: shambling horror pokedex lookup
+- Remove unused return portals (sokoban <-> purgatory)
+- Place Fort Ludios portal in the first eligible vault generated
+- Wielding Vorpal Blade protects against decapitation attacks
+- Allow centaurs to be Infidels
+- Remove 'noteleport' flag from the three-tiered demon boss levels
+- Remove unnecessary mspec code from mcastu.c
+- Fix: zapping self with slow monster doesn't always cause slowness
+- Fix: logic with monsters recharging wands
+- Refactor intelligent monster recharging code
+- Fix: a bit more logic with monsters recharging wands
+- Fix: monster recharging a wand of wishing
+- Fix: misc issues in searmsg
+- Try for unique topten names for Astral player monsters
+- Fix: ghosts appearing as 'name' and not 'name's ghost'
+- Prevent renaming bones monsters of former heroes
+- Fix: use after free when thrown object is destroyed by passive attack
+- Fix: memory leak when selecting appropriate material for sacrifice gift
+- Fix: memory leak when looting monster
+- Fix: two use-after-free issues revealed by asan
+- Fix: Minetown food shop doesn't convert to health food store for monks
+- Fix: remove/replace compromised web link from sys/winnt/Install.nt
+- Fix: various issues with monster wishing
+- Fix: add null check for mdef in explum()
+- Fix: remove shop cost fix for pricing exploit that no longer exists
+- Fix: use-after-free when fountain dipping
+- Fix: wishing for a helm of telepathy / gauntlets of fumbling
+- Fix: minor feedback issues with Nazgul's scream attack
+- Nazgul shouldn't wear the rings of invisibility they carry
+- Fix: avoid segfault when null obj passed to water_damage()
+- Purgatory map creation
+- More purgatory map work, ice queen branch tweaks
+- Fix: more use-after-free when fountain dipping
+- Fix: use-after-free with engulfer in xkilled()
+- Fix: potential use-after-free in expels()
+- Fix: AD_LOUD not doing damage; new monster - celestial dragon
+- Fix: boolean statement in AD_LOUD (mhitu.c)
+- Fix: AT_SCRE / AD_LOUD in mhitm.c 
+- Add bits to linux-debug hints file for fuzzing with ASAN
+- Fix: segfault when hitting a monster with a poisoned glass object
+- Fix: Sunsword and Trollsbane destroying corpses from a distance
+- Fix: 'dmonsfree: 1 removed doesn't match 2 pending' when knocking
+  back a monster into a pool/lava via force bolt/wand of striking
+- Add realtime display option
+- Fix: add some missing 'ifdef REALTIME_ON_BOTL' statements
+- Fix: cursed wands of invisibility cannot revert intrinsic
+  invisibility
+- Update various hints files (clang, hints for github workflow)
+- Fix: 'Your body rises from the dead as a human zombie...' as an
+  illithid
+- Fix: enable -Wstringop-truncation and -Wunused-result, correct
+  warnings revealed
+- Fix: enable -pedantic and -Wunreachable-code, correct warnings
+  revealed
+- Enable -Wimplicit-function-declaration and -Wimplicit-int
+- Fix: windows GUI splash screen
+- New monster spell: call undead
+- Edit macosx10.14 hints file for github workflow
+- Fix: prevent impossible lighting a massive stack of candles
+- Finish first Purgatory level
+- Fix: peaceful Lucifer
+- Suicide by wand
+- Enable -DEDIT_GETLIN for public server play
+- Secespita tweaks
+- Finish second and final Purgatory level
+- Adjust odds of the Wizard of Yendor resurrecting (again)
+- Fix: if poly form was killed from being hit by the Wand of
+  Orcus, max hitpoints were not restored when reverting to
+  original form
+- Forging artifacts
+- Fix: poisoned objects becoming unpoisoned would not update
+  their status in curses mode (perm_invent)
+- New forging artifact recipe - Glamdring
+- New forging artifact recipe - The Staff of the Archmagi
+- Make spheres' explosions passive as well as active
+- Don't grant tame djinni from lamps/potions if player is petless
+- The Staff of the Archmagi keeps curse protection from Magicbane
+- Change feedback when the Staff of the Archmagi absorbs a curse
+- New forging artifact recipe - Shadowblade
+- New forging artifact recipe - Gauntlets of Purity
+- Gauntlets of Purity gives damage bonus while worn for lawful
+  unarmed players trained in martial arts
+- New forging artifact recipe - Ashmar
+- Fix: paranoid_swim to use yes/no vs y/n
+- Remove SPFX_EXCLUDE
+- Ashmar artifact tweaks
+- The Gauntlets of Purity cannot be worn by the impious
+- Encyclopedia entries for all of the new forged artifacts
+- If the Gauntlets of Purity are forced off of your hands, any
+  wielded weapons are also forced to be dropped
+- Don't forget shields...
+- Refactor a couple artifact functions (lawful/chaotic)
+- Refactor non_wishable_artifact()
+- Refactor: encode artifact material in artilist
+- Fix: elemental vulnerability effects against monsters
+- Fix: various issues with the Sword of Annihilation's attack
+- Fix: proper credit for passive disintegration
+- Minor Purgatory tweaks
+- Fix: crash when unlocking a container with a wielded cursed
+  locking tool
+- Fix: impossible, eel hiding out of water (gnomish mines)
+- Fix: wishing for an object with an invalid material in wizmode
+  while fuzzing
+- Fix: hilite_pile shenanigans with ball & chain
+- Fix: monster recharging wands inside of a sack
+- Fix: some minor issues with spear traps
+- Fix: learning wielded weapon familiarity from unrelated thrown
+  weapons
+- Fix: guard against monster casting a spell at an already dead
+  monster
+- Give players a hint about the open air terrain on the second
+  icequeen level
+- Fix: impossible (hiding under nothing?)
+- Tweak the type/number of monsters in Gollum's cave
+- Prevent waking up Lucifer before actual encounter
+- Allow pokedex for shambling horrors in wizmode
+- Fix: sequencing issue: dismounting from dying steed
+- Greatly increase odds of sewage vs water rivers forming in the
+  Gnomish Mines
+- Fix: impossible (dmonsfree) when monster is killed by monster
+  spells that call explode()
+- Allow pokedex to show shambling horror stats after one has been killed
+- Fix: AT_MAGC / AD_FIRE attack in regards to demons
+- Some more Purgatory tweaks
+- Fix: AD_LOUD feedback cases
+- One more Gollum's cave tweak
+- Fix: crash when wearing white dragon-scaled armor and no boots while
+  100% fire resistant
+- Correct 'too many hooves' feedback
+- Fix: impossible 'mon_arrive: no corresponding portal?' when leaving Purgatory
+- Fix: unable to dig if wielding a cursed pick-axe/mattock
+- Another Goblin Town tweak
+- Fix: crowned Infidel that started as a centaur kept jump ability
+- Fix: make the Eye and Hand of Vecna immune to fire/lava damage
+- Fix: Dramborleg damage output
+- Fix: dead trees dropping fruit/petrified status, icequeen 2nd map tweaks
+- Fix: placement of monster rider/steed when separated
+- Allow magic lamps to operate underwater
+- Tortles that start with a trident, the trident is rustproof
+- Fix: feedback for Infidel killing themselves from life force drain
+- Use actions/checkout@v3 (github workflow)
+- Fix: remove melting ice timeouts when terrain changes
+- Fix: latest Xcode build issue
+- Fix: underwater vision update frequency
+- Update copyright year to 2023
+- Fix: the Wizard Of Yendor would respawn every time the player entered
+  Purgatory
+- Fix: dried up puddles would not unhide the monster hiding in it
+- Fix: placing antimatter vortex over itself after disintegrating
+  a shapechanger
+- Fix: Sword of Annihilation's disintegration vs target and target's worn armor
+- Fix: Angelslayer's fire damage vs target, Sword of Annihilation's target
+  armor tweaks
+- Fix: the Sword of Annihilation could disintegrate pieces of armor that
+  are inherently disintegration proof
+- Fix: instances where article was missing from the Gauntlets of Purity
+- Fix: underwater far vision in unlit areas
+- Fix: heap-use-after-free in munstone() function
+- Bourbon and Ozzy birthdays
+- Fix: monster spell 'Summon nasties'
+- Fix: missing a couple cases where Death_resistance should have been included
+- Blowing a whistle will identify it
+- Identity of the Riders hidden via farlook or 'More info about' prompt
+- Fix: thrown potions of polymorph by hostiles at hero that hit peacefuls
+  anger them
 
