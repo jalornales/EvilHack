@@ -978,9 +978,15 @@ break_armor()
                 (void) Cloak_off();
                 dropp(otmp);
             } else {
-                Your("%s tears apart!", cloak_simple_name(otmp));
-                (void) Cloak_off();
-                useup(otmp);
+                if (youmonst.data->msize >= MZ_HUGE
+                    && humanoid(youmonst.data)
+                    && otmp->otyp == CHROMATIC_DRAGON_SCALES) {
+                    ; /* nothing bad happens, armor is still worn */
+                } else {
+                    Your("%s tears apart!", cloak_simple_name(otmp));
+                    (void) Cloak_off();
+                    useup(otmp);
+                }
             }
         }
         if (uarmu) {
@@ -1918,8 +1924,7 @@ int part;
         return bird_parts[part];
     if (has_beak(mptr) && part == NOSE)
         return "beak";
-    if (mptr->mlet == S_CENTAUR
-        || (mon == &youmonst && Race_if(PM_CENTAUR))
+    if (is_centaur(mptr)
         || mptr->mlet == S_UNICORN
         || mptr == &mons[PM_KI_RIN]
         || mptr == &mons[PM_ELDRITCH_KI_RIN]

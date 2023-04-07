@@ -599,6 +599,9 @@ register struct monst *mtmp;
         m_respond(mtmp);
     if (mdat == &mons[PM_MEDUSA] && couldsee(mtmp->mx, mtmp->my))
         m_respond(mtmp);
+    if (is_gnome(mdat) && !is_undead(mdat)
+        && m_canseeu(mtmp))
+        m_respond(mtmp);
     if (DEADMONSTER(mtmp))
         return 1; /* m_respond gaze can kill medusa */
 
@@ -705,7 +708,7 @@ register struct monst *mtmp;
         if (mtmp->mpeaceful
             && (!Conflict || resist_conflict(mtmp))) {
             pline("It feels quite soothing.");
-        } else if (is_illithid(youmonst.data)) {
+        } else if (maybe_polyd(is_illithid(youmonst.data), Race_if(PM_ILLITHID))) {
             Your("psionic abilities shield your brain.");
         } else if (!u.uinvulnerable) {
             register boolean m_sen = sensemon(mtmp);
@@ -942,7 +945,7 @@ toofar:
         mplayer_purg_talk(mtmp);
     /* Saint Michael the Archangel in Purgatory */
     if (Inpurg && (distu(mtmp->mx, mtmp->my) <= 15)
-        && mtmp->data == &mons[PM_ARCHANGEL]
+        && mtmp->data == &mons[PM_SAINT_MICHAEL]
         && !mtmp->mpeaceful
         && couldsee(mtmp->mx, mtmp->my)
         && !mtmp->minvis && !rn2(5))
@@ -1237,9 +1240,14 @@ register int after;
     }
 #endif
 
-    /* jump toward the player if that lies in our nature */
-    if (can_jump(mtmp) || is_jumper(ptr)) {
+    /* jump toward the player if that lies in
+       our nature, can see the player, and isn't
+       otherwise incapacitated in some way */
+    if ((can_jump(mtmp) || is_jumper(ptr)) && m_canseeu(mtmp)
+        && !(mtmp->mflee || mtmp->mconf
+             || mtmp->mstun || mtmp->msleeping)) {
         int dist = dist2(mtmp->mx, mtmp->my, u.ux, u.uy);
+
         if (!mtmp->mpeaceful && !rn2(3) && dist <= 20 && dist > 8) {
             int x = u.ux - mtmp->mx;
             int y = u.uy - mtmp->my;

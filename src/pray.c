@@ -1040,7 +1040,7 @@ gcrownu()
          * can at least offer His own blessing? */
         obj = uwep;
         if (ok_wep(obj) && !obj->oartifact
-            && obj->quan == 1 && !(obj->oprops & ITEM_PROP_MASK)) {
+            && obj->quan == 1 && (obj->oprops & ITEM_PROP_MASK) == 0L) {
             Your("%s is wreathed in hellfire!", simple_typename(obj->otyp));
             obj->oprops |= ITEM_FIRE;
             obj->oprops_known |= ITEM_FIRE;
@@ -1876,10 +1876,10 @@ dosacrifice()
                    && uarmh && uarmh->otyp == HELM_OF_OPPOSITE_ALIGNMENT) {
             /* just got caught trying to be sneaky */
             You("offer the Amulet of Yendor to %s... but %s has noticed your deception!",
-                a_gname(), align_gname(u.ualignbase[A_ORIGINAL]));
+                a_gname(), align_gname(u.ualignbase[A_CURRENT]));
             /* your god isn't thrilled about it */
-            godvoice(u.ualignbase[A_ORIGINAL], "Thou shall pay for thy trickery, mortal!");
-            godvoice(u.ualignbase[A_ORIGINAL], "Bring unto me what is rightfully mine!");
+            godvoice(u.ualignbase[A_CURRENT], "Thou shall pay for thy trickery, mortal!");
+            godvoice(u.ualignbase[A_CURRENT], "Bring unto me what is rightfully mine!");
             /* say goodbye to the HoOA */
             destroy_arm(uarmh);
             change_luck(-5);
@@ -1887,7 +1887,7 @@ dosacrifice()
             /* and forget about ever being able to pray.
              * at least the hero is able to continue and
              * perhaps redeem themselves */
-            gods_upset(u.ualignbase[A_ORIGINAL]);
+            gods_upset(u.ualignbase[A_CURRENT]);
             return 1;
         } else {
             /* The final Test.  Did you win? */
@@ -2277,6 +2277,7 @@ dosacrifice()
                         }
 
                         bless(otmp);
+                        otmp->oeroded = otmp->oeroded2 = 0;
                         at_your_feet("An object");
                         place_object(otmp, u.ux, u.uy);
                         newsym(u.ux, u.uy);
@@ -2427,12 +2428,14 @@ dosacrifice()
                         while (((Race_if(PM_ELF) && otmp->material == IRON)
                                 || (Race_if(PM_ORC)
                                     && otmp->material == MITHRIL)
+                                || (Race_if(PM_ILLITHID)
+                                    && is_helmet(otmp)
+                                    && is_heavy_metallic(otmp))
                                 || (Role_if(PM_INFIDEL)
                                     && otmp->material == SILVER))
                                && ncount++ < 500) {
                             obfree(otmp, (struct obj *) 0);
                             otmp = mksobj(typ, FALSE, FALSE);
-                            /* keep trying for non-iron */
                         }
 
                         if (otmp) {
@@ -2446,6 +2449,7 @@ dosacrifice()
                                 bless(otmp);
                             otmp->spe = rn2(3) + 3; /* +3 to +5 */
                             otmp->oerodeproof = TRUE;
+                            otmp->oeroded = otmp->oeroded2 = 0;
                             otmp->owt = weight(otmp);
                             at_your_feet(otmp->quan > 1L ? "Some objects"
                                                          : "An object");
@@ -2481,6 +2485,7 @@ dosacrifice()
                     else
                         bless(otmp);
                     otmp->oerodeproof = TRUE;
+                    otmp->oeroded = otmp->oeroded2 = 0;
                     at_your_feet("An object");
                     place_object(otmp, u.ux, u.uy);
                     newsym(u.ux, u.uy);

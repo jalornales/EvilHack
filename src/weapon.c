@@ -20,18 +20,19 @@ STATIC_DCL void FDECL(skill_advance, (int));
  */
 #define PN_BARE_HANDED (-1) /* includes martial arts and thievery */
 #define PN_TWO_WEAPONS (-2)
-#define PN_RIDING (-3)
-#define PN_POLEARMS (-4)
-#define PN_SABER (-5)
-#define PN_HAMMER (-6)
-#define PN_WHIP (-7)
-#define PN_ATTACK_SPELL (-8)
-#define PN_HEALING_SPELL (-9)
-#define PN_DIVINATION_SPELL (-10)
-#define PN_ENCHANTMENT_SPELL (-11)
-#define PN_CLERIC_SPELL (-12)
-#define PN_ESCAPE_SPELL (-13)
-#define PN_MATTER_SPELL (-14)
+#define PN_SHIELD (-3)
+#define PN_RIDING (-4)
+#define PN_POLEARMS (-5)
+#define PN_SABER (-6)
+#define PN_HAMMER (-7)
+#define PN_WHIP (-8)
+#define PN_ATTACK_SPELL (-9)
+#define PN_HEALING_SPELL (-10)
+#define PN_DIVINATION_SPELL (-11)
+#define PN_ENCHANTMENT_SPELL (-12)
+#define PN_CLERIC_SPELL (-13)
+#define PN_ESCAPE_SPELL (-14)
+#define PN_MATTER_SPELL (-15)
 
 STATIC_VAR NEARDATA const short skill_names_indices[P_NUM_SKILLS] = {
     0, DAGGER, KNIFE, AXE, PICK_AXE, SHORT_SWORD, BROADSWORD, LONG_SWORD,
@@ -40,14 +41,14 @@ STATIC_VAR NEARDATA const short skill_names_indices[P_NUM_SKILLS] = {
     CROSSBOW, DART, SHURIKEN, BOOMERANG, PN_WHIP, UNICORN_HORN,
     PN_ATTACK_SPELL, PN_HEALING_SPELL, PN_DIVINATION_SPELL,
     PN_ENCHANTMENT_SPELL, PN_CLERIC_SPELL, PN_ESCAPE_SPELL, PN_MATTER_SPELL,
-    PN_BARE_HANDED, PN_TWO_WEAPONS, PN_RIDING
+    PN_BARE_HANDED, PN_TWO_WEAPONS, PN_SHIELD, PN_RIDING
 };
 
 /* note: entry [0] isn't used */
 STATIC_VAR NEARDATA const char *const odd_skill_names[] = {
     "no skill", "bare hands", /* use barehands_or_martial[] instead */
-    "two weapon combat", "riding", "polearms", "saber", "hammer", "whip",
-    "attack spells", "healing spells", "divination spells",
+    "two weapon combat", "shield", "riding", "polearms", "saber", "hammer",
+    "whip", "attack spells", "healing spells", "divination spells",
     "enchantment spells", "clerical spells", "escape spells", "matter spells",
 };
 /* indexed vis Role_if(PM_ROGUE) ? 2 : is_martial() */
@@ -73,7 +74,8 @@ int skill;
              (skill == P_NONE) ? ""
                  : (skill <= P_LAST_WEAPON) ? "weapon "
                      : (skill <= P_LAST_SPELL) ? "spell casting "
-                         : "fighting ");
+                         : (skill == P_SHIELD) ? "defensive "
+                             : "fighting ");
 }
 
 /* weapon's skill category name for use as generalized description of weapon;
@@ -232,7 +234,7 @@ struct obj *otmp;
 struct monst *mon;
 {
     int tmp = 0;
-    struct permonst *ptr = mon->data;
+    struct permonst *ptr = r_data(mon);
     boolean Is_weapon = (otmp->oclass == WEAPON_CLASS || is_weptool(otmp));
 
     /* Add the weapon's basic to-hit bonus */
@@ -316,7 +318,7 @@ struct obj *otmp;
 struct monst *mon;
 {
     int tmp = 0, otyp = otmp->otyp;
-    struct permonst *ptr = mon->data;
+    struct permonst *ptr = r_data(mon);
     boolean Is_weapon = (otmp->oclass == WEAPON_CLASS || is_weptool(otmp));
 
     if (!ptr) ptr = &mons[NUMMONS];
@@ -550,17 +552,17 @@ struct obj **hated_obj; /* ptr to offending object, can be NULL if not wanted */
      * roll for everything that applies and take the highest damage. */
     struct {
         long mask;
-        struct obj* obj;
+        struct obj **obj;
     } array[9] = {
-        { W_ARMG, gloves },
-        { W_ARMH, helm   },
-        { W_ARMS, shield },
-        { W_ARMF, boots  },
-        { W_ARM,  armor  },
-        { W_ARMC, cloak  },
-        { W_ARMU, shirt  },
-        { W_RINGL, leftring },
-        { W_RINGR, rightring }
+        { W_ARMG, &gloves },
+        { W_ARMH, &helm   },
+        { W_ARMS, &shield },
+        { W_ARMF, &boots  },
+        { W_ARM,  &armor  },
+        { W_ARMC, &cloak  },
+        { W_ARMU, &shirt  },
+        { W_RINGL, &leftring },
+        { W_RINGR, &rightring }
     };
 
     if (hated_obj)
@@ -598,8 +600,8 @@ struct obj **hated_obj; /* ptr to offending object, can be NULL if not wanted */
     }
 
     for (i = 0; i < 9; ++i) {
-        if (array[i].obj && (armask & array[i].mask)) {
-            tmpbonus = dmgval(array[i].obj, mdef);
+        if (*array[i].obj && (armask & array[i].mask)) {
+            tmpbonus = dmgval(*array[i].obj, mdef);
             if (tmpbonus > bonus) {
                 bonus = tmpbonus;
                 if (hated_obj) {
@@ -613,11 +615,11 @@ struct obj **hated_obj; /* ptr to offending object, can be NULL if not wanted */
                      * one, so that searmsg will get called with the most
                      * appropriate message.
                      */
-                    if (mon_hates_material(mdef, array[i].obj->material)
+                    if (mon_hates_material(mdef, (*array[i].obj)->material)
                         && (*hated_obj == NULL
-                            || (sear_damage(array[i].obj->material)
+                            || (sear_damage((*array[i].obj)->material)
                                 > sear_damage((*hated_obj)->material)))) {
-                        *hated_obj = array[i].obj;
+                        *hated_obj = *array[i].obj;
                     }
                 }
             }
@@ -1231,9 +1233,13 @@ register struct monst *mon;
             newly_welded = mwelded(obj);
             obj->owornmask &= ~W_WEP;
             if (newly_welded) {
+                const char *mon_hand = mbodypart(mon, HAND);
+
+                if (bimanual(obj))
+                    mon_hand = makeplural(mon_hand);
                 pline("%s %s to %s %s!", Tobjnam(obj, "weld"),
                       is_plural(obj) ? "themselves" : "itself",
-                      s_suffix(mon_nam(mon)), mbodypart(mon, HAND));
+                      s_suffix(mon_nam(mon)), mon_hand);
                 obj->bknown = 1;
             }
         }
@@ -1868,6 +1874,19 @@ int n; /* number of skills to drain */
         }
 }
 
+void
+reset_weapon_skills()
+{
+    while (u.skills_advanced) {
+        int skill = u.skill_record[--u.skills_advanced];
+        if (P_SKILL(skill) <= P_UNSKILLED)
+            panic("clear_all_skills (%d)", skill);
+        P_SKILL(skill)--; /* drop skill one level */
+        /* Lost skill might have taken more than one slot; refund rest. */
+        u.weapon_slots += slots_required(skill);
+    }
+}
+
 int
 weapon_type(obj)
 struct obj *obj;
@@ -2194,6 +2213,11 @@ const struct def_skill *class_skill;
     /* Centaurs/tortles can never ride anything */
     if (Race_if(PM_CENTAUR) || Race_if(PM_TORTLE))
         P_SKILL(P_RIDING) = P_NONE;
+
+    /* Roles that can reach expert or master in shield skill
+       already have a basic understanding of how to use them */
+    if (Role_if(PM_KNIGHT) || Role_if(PM_VALKYRIE))
+        P_SKILL(P_SHIELD) = P_BASIC;
 
     /*
      * Make sure we haven't missed setting the max on a skill

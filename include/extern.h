@@ -116,6 +116,7 @@ E boolean FDECL(wielding_artifact, (int));
 E boolean NDECL(awaiting_guaranteed_gift);
 E int FDECL(arti_align, (int));
 E boolean FDECL(non_wishable_artifact, (struct obj *));
+E boolean FDECL(is_forged_artifact, (struct obj *));
 
 /* ### attrib.c ### */
 
@@ -223,7 +224,6 @@ E char NDECL(randomkey);
 E void FDECL(random_response, (char *, int));
 E int NDECL(rnd_extcmd_idx);
 E int NDECL(doconduct);
-E int NDECL(domonability);
 E char FDECL(cmd_from_func, (int NDECL((*))));
 E boolean FDECL(redraw_cmd, (CHAR_P));
 #ifdef USE_TRAMPOLI
@@ -1833,7 +1833,8 @@ E void FDECL(set_output_mode, (int));
 E void NDECL(synch_cursor);
 E void NDECL(nethack_enter_nttty);
 E void NDECL(nttty_exit);
-#endif
+E int NDECL(set_keyhandling_via_option);
+#endif /* WIN32 */
 
 /* ### o_init.c ### */
 
@@ -3042,6 +3043,7 @@ E void FDECL(use_skill, (int, int));
 E void FDECL(add_weapon_skill, (int));
 E void FDECL(lose_weapon_skill, (int));
 E void FDECL(drain_weapon_skill, (int));
+E void NDECL(reset_weapon_skills);
 E int FDECL(weapon_type, (struct obj *));
 E int NDECL(uwep_skill_type);
 E int FDECL(weapon_hit_bonus, (struct obj *));

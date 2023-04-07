@@ -162,7 +162,7 @@ mon_sanity_check()
         } else if (mtmp != (m = level.monsters[x][y])) {
             if (!m || m->rider_id != mtmp->m_id)
                 impossible("mon (%s) at <%d,%d> is not there!",
-                       fmt_ptr((genericptr_t) mtmp), x, y);
+                           fmt_ptr((genericptr_t) mtmp), x, y);
         } else if (mtmp->wormno) {
             sanity_check_worm(mtmp);
         }
@@ -313,7 +313,7 @@ struct monst* mdef;
     if (newcham(mdef, &mons[PM_MIND_FLAYER], FALSE, FALSE)) {
         char name[PL_PSIZ];
         /* off-chance Izchak succumbs to a mind flayer larva's physical attack */
-        if (is_izchak(mdef, TRUE)) {
+        if (is_izchak(mdef, TRUE) && racial_human(mdef)) {
             pline("But wait!  %s transforms again into his true form!",
                   Monnam(mdef));
             mdef->mcanmove = 1;
@@ -325,6 +325,7 @@ struct monst* mdef;
             mdef->mconf = 0;
             mdef->mstun = 0;
             newcham(mdef, &mons[PM_ARCHANGEL], FALSE, FALSE);
+            free_erac(mdef);
             mdef->mhp = mdef->mhpmax = 1500;
             newsym(mdef->mx, mdef->my);
             return;
@@ -501,6 +502,8 @@ int mndx, mode;
                 mndx = PM_HOBBIT;
             else if (is_illithid(ptr))
                 mndx = PM_ILLITHID;
+            else if (is_tortle(ptr))
+                mndx = PM_TORTLE;
         }
         break;
     }
@@ -1259,7 +1262,7 @@ mcalcdistress()
         were_change(mtmp);
 
         /* special handling for Izchak */
-        if (is_izchak(mtmp, TRUE)) {
+        if (is_izchak(mtmp, TRUE) && racial_human(mtmp)) {
             if (mtmp->mstone > 3 || mtmp->msick > 0)
                 mondead(mtmp);
         }
@@ -1387,9 +1390,8 @@ movemon()
         }
 
 
-        if ((mtmp->data == &mons[PM_WIZARD_OF_YENDOR] && !rn2(5))
-            || (is_mplayer(mtmp->data) && !rn2(16))
-            || !rn2(300)) {
+        if ((is_mplayer(mtmp->data) && !rn2(16))
+             || !rn2(300)) {
             if (mount_up(mtmp))
                 continue;
         }
@@ -2371,6 +2373,12 @@ long flag;
                 && !((flag & ALLOW_WALL) && may_passwall(nx, ny))
                 && !((IS_TREES(ntyp) ? treeok : rockok) && may_dig(nx, ny)))
                 continue;
+            /* intelligent peacefuls avoid digging shop/temple walls */
+            if (IS_ROCK(ntyp) && rockok
+                && !mindless(mon->data) && (mon->mpeaceful || mon->mtame)
+                && (*in_rooms(nx, ny, TEMPLE) || *in_rooms(nx, ny, SHOPBASE))
+                && !(*in_rooms(x, y, TEMPLE) || *in_rooms(x, y, SHOPBASE)))
+                continue;
             /* KMH -- Added iron bars */
             if (ntyp == IRONBARS
                 && (!(flag & ALLOW_BARS)
@@ -3234,7 +3242,7 @@ register struct monst *mtmp;
         return;
 
     /* someone or something decided to mess with Izchak. oops... */
-    if (is_izchak(mtmp, TRUE)) {
+    if (is_izchak(mtmp, TRUE) && racial_human(mtmp)) {
         if (canspotmon(mtmp)) {
             pline("But wait!  %s rises and transforms into his true form!",
                   Monnam(mtmp));
@@ -3251,6 +3259,7 @@ register struct monst *mtmp;
         if (!mtmp->mpeaceful)
             hot_pursuit(mtmp);
         newcham(mtmp, &mons[PM_ARCHANGEL], FALSE, FALSE);
+        free_erac(mtmp);
         mtmp->mhp = mtmp->mhpmax = 1500;
         if (mtmp == u.ustuck) {
             if (u.uswallow)
@@ -4551,6 +4560,24 @@ struct monst *mtmp;
                 break;
             }
     }
+    if (is_gnome(mtmp->data) && !is_undead(mtmp->data)) {
+        struct obj *otmp;
+
+        if (!rn2(25) && !(mtmp->mflee || mtmp->msleeping
+                          || mtmp->mstun || mtmp->mconf || mtmp->mfrozen)) {
+            for (otmp = invent; otmp; otmp = otmp->nobj) {
+                if (otmp->otyp == EGG && otmp->corpsenm == NON_PM) {
+                    if (canseemon(mtmp))
+                        pline("%s looks at you and is immediately agitated.",
+                              Monnam(mtmp));
+                    if (!Deaf)
+                        verbalize("Ahhhh!  Eggs!  %s has eggs!!",
+                                  (flags.female) ? "She" : "He");
+                    monflee(mtmp, d(2, 6) + 10, TRUE, TRUE);
+                }
+            }
+        }
+    }
 }
 
 /* Called whenever the player attacks mtmp; also called in other situations
@@ -4917,27 +4944,31 @@ register struct monst *mtmp;
     return FALSE;
 }
 
-/* reveal a monster at x,y hiding under an object,
-   if there are no objects there */
+/* reveal a hiding monster at x,y, either under nonexistent object,
+   or certain monsters out of water. */
 void
 maybe_unhide_at(x, y)
 xchar x, y;
 {
     struct monst *mtmp;
+    boolean undetected = FALSE, trapped = FALSE;
 
-    if (OBJ_AT(x, y))
-        return;
-    if ((mtmp = m_at(x, y)) == 0
-        && x == u.ux && y == u.uy) {
+    if ((mtmp = m_at(x, y)) != (struct monst *) 0) {
+        undetected = mtmp->mundetected;
+        trapped = mtmp->mtrapped;
+    } else if (x == u.ux && y == u.uy) {
         mtmp = &youmonst;
-        /* mtmp->mundetected here isn't synchronized with
-           u.uundetected, we have to use u.uundetected for
-           the hero */
-        if (u.uundetected && hides_under(mtmp->data))
-            (void) hideunder(mtmp);
-    } else if (mtmp && mtmp->mundetected && hides_under(mtmp->data)) {
-        (void) hideunder(mtmp);
+        undetected = u.uundetected;
+        trapped = u.utrap;
+    } else {
+        return;
     }
+
+    if (undetected
+        && ((hides_under(mtmp->data) && (!OBJ_AT(x, y) || trapped))
+            || (mtmp->data->mlet == S_EEL && !is_damp_terrain(x, y))
+            || (mtmp->data == &mons[PM_GIANT_LEECH] && !is_sewage(x, y))))
+        (void) hideunder(mtmp);
 }
 
 /* monster/hero tries to hide under something at the current location */
@@ -5715,9 +5746,12 @@ int mnum;
      * grow into queen bees.  Ditto for [winged-]gargoyles.
      */
     if (mnum == PM_KILLER_BEE || mnum == PM_GARGOYLE
+        || mnum == PM_GIANT_ANT
         || (lays_eggs(&mons[mnum])
             && (BREEDER_EGG
-                || (mnum != PM_QUEEN_BEE && mnum != PM_WINGED_GARGOYLE))))
+                || (mnum != PM_QUEEN_BEE
+                    && mnum != PM_WINGED_GARGOYLE
+                    && mnum != PM_QUEEN_ANT))))
         return mnum;
     return NON_PM;
 }
@@ -5733,6 +5767,10 @@ boolean force_ordinary;
             mnum = PM_KILLER_BEE;
         else if (mnum == PM_WINGED_GARGOYLE)
             mnum = PM_GARGOYLE;
+        else if (mnum == PM_QUEEN_ANT)
+            mnum = PM_GIANT_ANT;
+        else if (mnum == PM_GIANT_CROCODILE)
+            mnum = PM_CROCODILE; /* appearances only */
     }
     return mnum;
 }

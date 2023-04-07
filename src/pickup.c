@@ -2421,7 +2421,8 @@ register struct obj *obj;
         pline_The("stone%s won't leave your person.", plur(obj->quan));
         return 0;
     } else if (obj->otyp == AMULET_OF_YENDOR
-               || (Role_if(PM_INFIDEL) && is_quest_artifact(obj) && obj->spe)
+               || (Role_if(PM_INFIDEL)
+                   && is_quest_artifact(obj))
                || obj->otyp == CANDELABRUM_OF_INVOCATION
                || obj->otyp == BELL_OF_OPENING
                || obj->otyp == SPE_BOOK_OF_THE_DEAD) {
@@ -3474,7 +3475,7 @@ boolean creation;
             && (obj->oclass == ARMOR_CLASS || obj->oclass == WEAPON_CLASS)
             /* keep/stash "special" (magical/artifact) weapons and armor */
             && !obj->oartifact && !objects[obj->otyp].oc_magic
-            && (obj->oprops & ITEM_PROP_MASK) == 0
+            && (obj->oprops & ITEM_PROP_MASK) == 0L
             /* if the player explicitly gave it to their pet, go ahead and
              * (maybe) stash it anyway */
             && !obj->invlet)
@@ -3635,18 +3636,21 @@ struct obj *box; /* or bag */
                                  ansimpleoname(otmp), otense(otmp, "tumble"));
                     do_boh_explosion(targetbox, held);
                     nobj = 0; /* stop tipping; want loop to exit 'normally' */
-                    if (held)
-                        useup(targetbox);
-                    else
-                        useupf(targetbox, targetbox->quan);
 
                     livelog_printf(LL_ACHIEVE, "just blew up %s %s", uhis(),
                                    tipBotH ? "Bag of the Hesperides" : "bag of holding");
 
                     if (tipBotH)
-                        losehp(Maybe_Half_Phys(d(12, 12)), "exploding magical artifact bag", KILLED_BY_AN);
+                        losehp(Maybe_Half_Phys(d(12, 12)),
+                               "exploding magical artifact bag", KILLED_BY_AN);
                     else
-                        losehp(Maybe_Half_Phys(d(8, 10)), "exploding magical bag", KILLED_BY_AN);
+                        losehp(Maybe_Half_Phys(d(8, 10)),
+                               "exploding magical bag", KILLED_BY_AN);
+
+                    if (held)
+                        useup(targetbox);
+                    else
+                        useupf(targetbox, targetbox->quan);
 
                     targetbox = 0; /* it's gone */
                 } else {

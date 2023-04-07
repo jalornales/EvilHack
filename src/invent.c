@@ -1,4 +1,4 @@
-/* NetHack 3.6	invent.c	$NHDT-Date: 1575245062 2019/12/02 00:04:22 $  $NHDT-Branch: NetHack-3.6 $:$NHDT-Revision: 1.267 $ */
+/* NetHack 3.6	invent.c	$NHDT-Date: 1674864733 2023/01/28 00:12:13 $  $NHDT-Branch: NetHack-3.6 $:$NHDT-Revision: 1.268 $ */
 /* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
 /*-Copyright (c) Derek S. Ray, 2015. */
 /* NetHack may be freely redistributed.  See license for details. */
@@ -829,9 +829,8 @@ struct obj *obj;
         /* Player will be able to discover if s/he has the real amulet */
         /* by monitoring the livelog - but only when it was picked up */
         /* for the first time */
-        if (!u.uachieve.amulet && !Role_if(PM_INFIDEL))
+        if (!u.uachieve.amulet && !Role_if(PM_INFIDEL)) {
             livelog_write_string(LL_ACHIEVE, "acquired the Amulet of Yendor");
-        if (!Role_if(PM_INFIDEL)) {
             u.uachieve.amulet = 1;
             mkgate();
         }
@@ -861,7 +860,7 @@ struct obj *obj;
             if (u.uhave.questart)
                 impossible("already have quest artifact?");
             u.uhave.questart = 1;
-            if (Role_if(PM_INFIDEL) && obj->spe)
+            if (Role_if(PM_INFIDEL) && u.uachieve.amulet)
                 u.uhave.amulet = 1;
             artitouch(obj);
         }
@@ -1173,7 +1172,7 @@ struct obj *obj;
             if (!u.uhave.questart)
                 impossible("don't have quest artifact?");
             u.uhave.questart = 0;
-            if (Role_if(PM_INFIDEL) && obj->spe)
+            if (Role_if(PM_INFIDEL) && u.uachieve.amulet)
                 u.uhave.amulet = 0;
         }
         set_artifact_intrinsic(obj, 0, W_ART);
@@ -1231,7 +1230,8 @@ delobj_core(obj, force)
 struct obj *obj;
 boolean force; /* 'force==TRUE' used when reviving Rider corpses */
 {
-    boolean update_map;
+    boolean update_map, was_pile, is_pile;
+    int x = 0, y = 0;
 
     if (!force && obj_resists(obj, 0, 0)) {
         /* player might be doing something stupid, but we
@@ -1242,10 +1242,19 @@ boolean force; /* 'force==TRUE' used when reviving Rider corpses */
         return;
     }
     update_map = (obj->where == OBJ_FLOOR);
+    if (update_map) {
+        x = obj->ox;
+        y = obj->oy;
+        was_pile = (level.objects[x][y] && level.objects[x][y]->nexthere);
+    }
     obj_extract_self(obj);
     if (update_map) { /* floor object's coordinates are always up to date */
-        maybe_unhide_at(obj->ox, obj->oy);
-        newsym(obj->ox, obj->oy);
+        is_pile = (level.objects[x][y] && level.objects[x][y]->nexthere);
+        maybe_unhide_at(x, y);
+        if (was_pile != is_pile)
+            newsym_force(x, y);
+        else
+            newsym(x, y);
     }
     obfree(obj, (struct obj *) 0); /* frees contents also */
 }
@@ -2525,10 +2534,13 @@ long quan;       /* if non-0, print this quantity, not obj->quan */
 #else
     static char li[BUFSZ];
 #endif
+    char suffix[80]; /* plenty of room for count and hallucinatory currency */
+    int sfxlen, txtlen; /* signed int for %*s formatting */
+    const char *fmt;
     boolean use_invlet = (flags.invlet_constant
                           && let != CONTAINED_SYM && let != HANDS_SYM);
-    long savequan = 0;
-    long save_owt = 0;
+    long savequan = 0L;
+    long save_owt = 0L;
 
     if (quan && obj) {
         if (iflags.invweight) {
@@ -2544,24 +2556,37 @@ long quan;       /* if non-0, print this quantity, not obj->quan */
      *  *  Then obj == null and we are printing a total amount.
      *  >  Then the object is contained and doesn't have an inventory letter.
      */
-    if (cost != 0 || let == '*') {
+    fmt = "%c - %.*s%s";
+    if (!txt)
+        txt = doname(obj);
+    txtlen = (int) strlen(txt);
+
+    if (cost != 0L || let == '*') {
         /* if dot is true, we're doing Iu, otherwise Ix */
-        Sprintf(li,
-                iflags.menu_tab_sep ? "%c - %s\t%6ld %s"
-                                    : "%c - %-45s %6ld %s",
-                (dot && use_invlet ? obj->invlet : let),
-                (txt ? txt : doname(obj)), cost, currency(cost));
+        if (dot && use_invlet)
+            let = obj->invlet;
+        Sprintf(suffix, "%c%6ld %.50s", iflags.menu_tab_sep ? '\t' : ' ',
+                cost, currency(cost));
+        if (!iflags.menu_tab_sep) {
+            fmt = "%c - %-45.*s%s";
+            if (txtlen < 45)
+                txtlen = 45;
+        }
     } else {
         /* ordinary inventory display or pickup message */
-        Sprintf(li, "%c - %s%s", (use_invlet ? obj->invlet : let),
-                (txt ? txt : doname(obj)), (dot ? "." : ""));
+        if (use_invlet)
+            let = obj->invlet;
+        Strcpy(suffix, dot ? "." : "");
     }
-    if (savequan) {
+    sfxlen = (int) strlen(suffix);
+    if (txtlen > BUFSZ - 1 - (4 + sfxlen)) /* 4: "c - " prefix */
+        txtlen = BUFSZ - 1 - (4 + sfxlen);
+    Sprintf(li, fmt, let, txtlen, txt, suffix);
+
+    if (savequan)
         obj->quan = savequan;
-    }
-    if (save_owt) {
+    if (save_owt)
         obj->owt = save_owt;
-    }
 
     return li;
 }

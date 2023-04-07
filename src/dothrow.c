@@ -202,29 +202,31 @@ int shotlimit;
                 if (skill == -P_CROSSBOW)
                     multishot++;
                 break;
+            case PM_GIANT:
+                /* Giants are good at throwing things, but not at
+                   using bows, crossbows and slings */
+                if ((skill == -P_CROSSBOW) || (skill == -P_BOW)
+                    || (skill == -P_SLING))
+                    multishot = 1;
+                break;
+            case PM_HOBBIT:
+                /* Hobbits are also good with slings and small blades */
+                if ((skill == -P_SLING) || (skill == P_KNIFE)
+                    || (skill == P_DAGGER))
+                    multishot++;
+                break;
+            case PM_CENTAUR:
+                /* Centaurs are experts with the bow and crossbow */
+                if ((skill == -P_CROSSBOW) || (skill == -P_BOW))
+                    multishot++;
+                break;
             case PM_HUMAN:
             case PM_DWARF:
+            case PM_ILLITHID:
+            case PM_TORTLE:
             default:
                 break; /* No bonus */
             }
-
-        if (Race_if(PM_GIANT)) {
-            /* Giants are good at throwing things, but not at
-             * using bows, crossbows and slings.
-             */
-            if ((skill == -P_CROSSBOW) || (skill == -P_BOW)
-                || (skill == -P_SLING))
-                multishot = 1;
-        } else if (Race_if(PM_HOBBIT)) {
-            /* Normal hobbits are also good with slings and small blades */
-            if ((skill == -P_SLING) || (skill == -P_KNIFE)
-                || (skill == -P_DAGGER))
-                multishot++;
-        } else if (Race_if(PM_CENTAUR)) {
-            /* Centaurs are experts with the bow and crossbow */
-            if ((skill == -P_CROSSBOW) || (skill == -P_BOW))
-                multishot++;
-        }
 
         /* crossbows are slow to load and probably shouldn't allow multiple
            shots at all, but that would result in players never using them;
@@ -1268,6 +1270,7 @@ boolean twoweap; /* used to restore twoweapon mode if wielded weapon returns */
                 slipok = FALSE;
         }
         if (slipok) {
+            char tmpbuf[BUFSZ];
             int dmg = dmgval(obj, &youmonst);
 
             u.dx = rn2(3) - 1;
@@ -1296,7 +1299,9 @@ boolean twoweap; /* used to restore twoweapon mode if wielded weapon returns */
                     searmsg(&youmonst, &youmonst, obj, FALSE);
                     exercise(A_CON, FALSE);
                 }
-                losehp(dmg, "hitting themselves with a cursed projectile", KILLED_BY);
+                Sprintf(tmpbuf, "hitting %sself with a cursed projectile",
+                        uhim());
+                losehp(dmg, tmpbuf, KILLED_BY);
             }
             impaired = TRUE;
         }
@@ -1338,8 +1343,8 @@ boolean twoweap; /* used to restore twoweapon mode if wielded weapon returns */
                aklys must be wielded as primary to return when thrown */
             && iflags.returning_missile
             && !impaired) {
-            pline("%s the %s and returns to your hand!", Tobjnam(obj, "hit"),
-                  ceiling(u.ux, u.uy));
+            pline("%s the %s and returns to your %s!", Tobjnam(obj, "hit"),
+                  ceiling(u.ux, u.uy), body_part(HAND));
             obj = addinv(obj);
             (void) encumber_msg();
             if (obj->owornmask & W_QUIVER) /* in case addinv() autoquivered */
@@ -1462,8 +1467,18 @@ boolean twoweap; /* used to restore twoweapon mode if wielded weapon returns */
         else if (obj == uball && u.utrap && u.utraptype == TT_INFLOOR)
             range = 1;
 
-        if (Underwater)
-            range = 1;
+        if (Underwater) {
+            if (rn2(5)) {
+                pline("Water turbulence prevents the %s from %s.",
+                      simpleonames(obj),
+                      ammo_and_launcher(obj, uwep) ? "firing" : "being thrown");
+                if (!iflags.returning_missile)
+                    pline("It drifts down to your %s.", makeplural(body_part(FOOT)));
+                range = 0;
+            } else {
+                range = 1;
+            }
+        }
 
         mon = bhit(u.dx, u.dy, range,
                    tethered_weapon ? THROWN_TETHERED_WEAPON : THROWN_WEAPON,
@@ -1532,7 +1547,9 @@ boolean twoweap; /* used to restore twoweapon mode if wielded weapon returns */
                     sho_obj_return_to_u(obj); /* display its flight */
 
                 if (!impaired && rn2(100)) {
-                    pline("%s to your hand!", Tobjnam(obj, "return"));
+                    if (range > 0)
+                        pline("%s to your %s!", Tobjnam(obj, "return"),
+                              body_part(HAND));
                     obj = addinv(obj);
                     (void) encumber_msg();
                     /* addinv autoquivers an aklys if quiver is empty;

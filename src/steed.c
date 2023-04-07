@@ -156,15 +156,18 @@ struct monst *rider;
 
     /* handle rider if both rider and steed are alive */
     if (!DEADMONSTER(rider) && !DEADMONSTER(steed)) {
+        xchar orig_x = rider->mx, orig_y = rider->my;
         /* move rider to an adjacent tile */
         if (enexto(&cc, rider->mx, rider->my, rider->data))
-            rloc_to(steed, cc.x, cc.y);
+            rloc_to(rider, cc.x, cc.y);
         else /* evidently no room nearby; move rider elsewhere */
             (void) rloc(rider, FALSE);
+        place_monster(steed, orig_x, orig_y);
     }
     /* place rider if steed dies and rider is still alive */
     if (!DEADMONSTER(rider) && DEADMONSTER(steed)) {
-        remove_monster(steed->mx, steed->my);
+        remove_monster(steed->mx, steed->my); /* remove pointer to steed */
+        steed->mx = 0, steed->my = 0; /* zero out steeds location on map */
         place_monster(rider, rider->mx, rider->my);
     }
     /* place steed if rider dies and steed is still alive */
@@ -518,7 +521,7 @@ can_ride(mtmp)
 struct monst *mtmp;
 {
     return ((mtmp->mtame && humanoid(youmonst.data)
-             && !is_tortle(youmonst.data)
+             && !maybe_polyd(is_tortle(youmonst.data), Race_if(PM_TORTLE))
              && !verysmall(youmonst.data)
              && !bigmonst(youmonst.data)
              && (!Underwater || is_swimmer(mtmp->data)))

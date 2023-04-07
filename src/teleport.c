@@ -541,7 +541,7 @@ struct obj *scroll;
     /* Being in the presence of demon lords/princes can negate
        teleportation most of the time */
     for (mtmp = fmon; mtmp; mtmp = mtmp->nmon) {
-        if (is_dlord(mtmp->data) && rn2(5)
+        if (is_dlord(mtmp->data) && rn2(10)
             && !wizard) {
             pline("Demonic forces prevent you from teleporting.");
             return TRUE;
@@ -852,7 +852,7 @@ level_tele()
     /* Being in the presence of demon lords/princes can negate
        level teleportation most of the time */
     for (mtmp = fmon; mtmp; mtmp = mtmp->nmon) {
-        if (is_dlord(mtmp->data) && rn2(5)
+        if (is_dlord(mtmp->data) && rn2(10)
             && !wizard) {
             pline("Demonic forces prevent you from teleporting.");
             return;
@@ -914,27 +914,22 @@ level_tele()
                     && !u.uhave.amulet) {
                     struct obj *amu;
 
-                    if (!Role_if(PM_INFIDEL)) {
-                        amu = mksobj(AMULET_OF_YENDOR, TRUE, FALSE);
-                    } else if ((amu = find_quest_artifact(1 << OBJ_INVENT))) {
-                        obj_extract_self(amu); /* may be contained */
-                        amu->spe = 1;
-                    } else {
+                    if (Role_if(PM_INFIDEL)) {
                         const char *idol = artiname(ART_IDOL_OF_MOLOCH);
+
                         amu = mksobj(FIGURINE, TRUE, FALSE);
                         artifact_exists(amu, idol, TRUE);
                         new_oname(amu, strlen(idol) + 1);
                         Strcpy(ONAME(amu), idol);
-                        amu->spe = 1;
+                        u.uachieve.amulet = 1;
+                    } else {
+                        amu = mksobj(AMULET_OF_YENDOR, TRUE, FALSE);
                     }
-
-                    if (amu) {
-                        /* ordinarily we'd use hold_another_object()
-                           for something like this, but we don't want
-                           fumbling or already full pack to interfere */
-                        amu = addinv(amu);
-                        prinv("Endgame prerequisite:", amu, 0L);
-                    }
+                    /* ordinarily we'd use hold_another_object()
+                       for something like this, but we don't want
+                       fumbling or already full pack to interfere */
+                    amu = addinv(amu);
+                    prinv("Endgame prerequisite:", amu, 0L);
                 }
                 force_dest = TRUE;
             } else if ((newlev = lev_by_name(buf)) == 0)
@@ -1103,11 +1098,24 @@ level_tele()
 
         /* if invocation did not yet occur, teleporting into
          * the last level of Gehennom is forbidden.
+         * attempting to bypass the three demon boss lairs
+         * or Orcus town is also forbidden
          */
-        if (!wizard && Inhell && !u.uevent.invoked && newlev >= deepest) {
-            newlev = deepest - 1;
-            pline("Sorry...");
+        if (!wizard && Inhell) {
+            if (!u.uevent.hella_entered && newlev > depth(&hella_level))
+                newlev = depth(&hella_level);
+            if (!u.uevent.hellb_entered && newlev > depth(&hellb_level))
+                newlev = depth(&hellb_level);
+            if (!u.uevent.hellc_entered && newlev > depth(&hellc_level))
+                newlev = depth(&hellc_level);
+            if (!u.uevent.orcus_entered && newlev > depth(&orcus_level))
+                newlev = depth(&orcus_level);
+            if (!u.uevent.invoked && newlev >= deepest) {
+                newlev = deepest - 1;
+                pline("Sorry...");
+            }
         }
+
         /* no teleporting out of quest dungeon */
         if (In_quest(&u.uz) && newlev < depth(&qstart_level))
             newlev = depth(&qstart_level);

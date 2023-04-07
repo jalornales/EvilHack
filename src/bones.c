@@ -34,6 +34,9 @@ d_level *lev;
                          in any dungeon (level 1 isn't multiway) */
                       || Is_botlevel(lev)
                       || (Is_branchlev(lev) && lev->dlevel > 1)
+                      /* only allow bones in the valley if Cerberus
+                         still lives */
+                      || (Is_valley(lev) && !u.uevent.ucerberus)
                       /* no bones in the invocation level */
                       || (In_hell(lev)
                           && lev->dlevel == dunlevs_in_dungeon(lev) - 1));
@@ -145,7 +148,9 @@ boolean restore;
             /* Prevent non-wishable artifacts that are
                meant to be found with their owners or at
                the end of a specific quest from winding up
-               in a bones pile */
+               in a bones pile. Forged artifacts also fall
+               under this category, as all of them are
+               flagged as SPFX_NOWISH */
             if (non_wishable_artifact(otmp)) {
                 struct monst *mtmp;
                 mtmp = find_owner_on_level(otmp);

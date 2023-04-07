@@ -1352,9 +1352,9 @@ xchar rtype, rlit;
     if (h == -1)
         h = rnd(height - 3);
     if (x == -1)
-        x = rnd(width - w - 1) - 1;
+        x = rnd(width - w);
     if (y == -1)
-        y = rnd(height - h - 1) - 1;
+        y = rnd(height - h);
     if (x == 1)
         x = 0;
     if (y == 1)
@@ -1968,6 +1968,9 @@ struct mkroom *croom;
             otmp->oeroded = (o->eroded % 4);
             otmp->oeroded2 = ((o->eroded >> 2) % 4);
         }
+    } else {
+        otmp->oeroded = otmp->oeroded2 = 0;
+        otmp->oerodeproof = 0;
     }
     if (o->recharged)
         otmp->recharged = (o->recharged % 8);
@@ -1979,12 +1982,11 @@ struct mkroom *croom;
     }
     if (o->trapped == 0 || o->trapped == 1)
         otmp->otrapped = o->trapped;
-    if (o->greased)
+    if (o->greased) {
         otmp->greased = 1;
-#ifdef INVISIBLE_OBJECTS
-    if (o->invis)
-        otmp->oinvis = 1;
-#endif
+    } else {
+        otmp->greased = 0;
+    }
 
     if (o->quan > 0 && objects[otmp->otyp].oc_merge) {
         otmp->quan = o->quan;

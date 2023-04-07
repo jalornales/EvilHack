@@ -555,7 +555,7 @@ struct monst *mtmp;
         return FALSE;
     }
 
-    if (stuck || immobile) {
+    if (stuck || immobile || mtmp->mtrapped) {
         ; /* fleeing by stairs or traps is not possible */
     } else if (levl[x][y].typ == STAIRS) {
         if (x == xdnstair && y == ydnstair) {
@@ -1010,7 +1010,8 @@ struct monst *mtmp;
             int nlev;
             d_level flev;
 
-            if (mon_has_amulet(mtmp) || In_endgame(&u.uz)) {
+            if (mon_has_amulet(mtmp) || In_endgame(&u.uz)
+                || (Is_sanctum(&u.uz) && mtmp->data == &mons[PM_LUCIFER])) {
                 if (vismon)
                     pline("%s seems very disoriented for a moment.",
                           Monnam(mtmp));
@@ -2528,6 +2529,7 @@ struct monst *mtmp;
     int xx, yy, pmidx = NON_PM;
     boolean immobile = (mdat->mmove == 0);
     boolean stuck = (mtmp == u.ustuck);
+    boolean trapped = mtmp->mtrapped;
 
     m.misc = (struct obj *) 0;
     m.has_misc = 0;
@@ -2543,7 +2545,7 @@ struct monst *mtmp;
     if (dist2(x, y, mtmp->mux, mtmp->muy) > 36)
         return FALSE;
 
-    if (!stuck && !immobile && (mtmp->cham == NON_PM)
+    if (!stuck && !immobile && !trapped && (mtmp->cham == NON_PM)
         && mons[(pmidx = monsndx(mdat))].difficulty < 6) {
         boolean ignore_boulders = (r_verysmall(mtmp)
                                    || racial_throws_rocks(mtmp)
@@ -2615,6 +2617,7 @@ struct monst *mtmp;
             && distu(mtmp->mx, mtmp->my) <= 2
             /* don't bother if it can't work (this doesn't
                prevent cursed weapons from being targetted) */
+            && !u.uswallow
             && (canletgo(uwep, "")
                 || (u.twoweap && canletgo(uswapwep, "")))) {
             m.misc = obj;
@@ -2631,6 +2634,7 @@ struct monst *mtmp;
             && distu(mtmp->mx, mtmp->my) <= 2
             /* don't bother if it can't work (this doesn't
                prevent cursed weapons from being targetted) */
+            && !u.uswallow
             && (canletgo(uwep, "")
                 || (u.twoweap && canletgo(uswapwep, "")))) {
             m.misc = obj;
@@ -2645,7 +2649,8 @@ struct monst *mtmp;
             && uarms && !rn2(7) && obj == MON_WEP(mtmp)
             /* hero's location must be known and adjacent */
             && mtmp->mux == u.ux && mtmp->muy == u.uy
-            && distu(mtmp->mx, mtmp->my) <= 2) {
+            && distu(mtmp->mx, mtmp->my) <= 2
+            && !u.uswallow) {
             m.misc = obj;
             m.has_misc = MUSE_DWARVISH_BEARDED_AXE_SHIELD;
         }
@@ -2786,6 +2791,7 @@ struct obj *start;
             && distu(mtmp->mx, mtmp->my) <= 2
             /* don't bother if it can't work (this doesn't
                prevent cursed weapons from being targetted) */
+            && !u.uswallow
             && (canletgo(uwep, "")
                 || (u.twoweap && canletgo(uswapwep, "")))) {
             m.misc = obj;
@@ -2802,6 +2808,7 @@ struct obj *start;
             && distu(mtmp->mx, mtmp->my) <= 2
             /* don't bother if it can't work (this doesn't
                prevent cursed weapons from being targetted) */
+            && !u.uswallow
             && (canletgo(uwep, "")
                 || (u.twoweap && canletgo(uswapwep, "")))) {
             m.misc = obj;
@@ -2816,7 +2823,8 @@ struct obj *start;
             && uarms && !rn2(7) && obj == MON_WEP(mtmp)
             /* hero's location must be known and adjacent */
             && mtmp->mux == u.ux && mtmp->muy == u.uy
-            && distu(mtmp->mx, mtmp->my) <= 2) {
+            && distu(mtmp->mx, mtmp->my) <= 2
+            && !u.uswallow) {
             m.misc = obj;
             m.has_misc = MUSE_DWARVISH_BEARDED_AXE_SHIELD;
         }
@@ -2996,7 +3004,8 @@ struct monst *mtmp;
                 get_level(&tolevel, tolev);
                 /* insurance against future changes... */
                 if (on_level(&tolevel, &u.uz)
-                    || (Iniceq && mtmp->data == &mons[PM_KATHRYN_THE_ICE_QUEEN]))
+                    || (Iniceq && mtmp->data == &mons[PM_KATHRYN_THE_ICE_QUEEN])
+                    || (Is_sanctum(&u.uz) && mtmp->data == &mons[PM_LUCIFER]))
                     goto skipmsg;
                 if (vismon) {
                     pline("%s rises up, through the %s!", Monnam(mtmp),
@@ -3317,6 +3326,9 @@ struct monst *mtmp;
                       !is_plural(obj) ? "It is" : "They are", hand,
                       !obj->bknown ? '!' : '.');
                 /* obj->bknown = 1; */ /* welded() takes care of this */
+                where_to = 0;
+            } else if (P_SKILL(P_SHIELD) >= P_EXPERT) {
+                You("hold on firmly to %s.", ysimple_name(obj));
                 where_to = 0;
             }
             if (!where_to) {

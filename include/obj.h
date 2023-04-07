@@ -124,12 +124,11 @@ struct obj {
 #define record_achieve_special corpsenm
 #define dragonscales corpsenm /* dragon-scaled body armor
                                * (index into objects[], not mons[]) */
-    int usecount;           /* overloaded for various things that tally */
-#define spestudied usecount /* # of times a spellbook has been studied */
-#define wep_kills usecount  /* number of kills a weapon has */
-#define newwarncnt usecount /* How many monsters a glow warning artifact is currently warning of */
+    int wep_kills;          /* tally number of kills a weapon has */
+    int spestudied;         /* tally # of times a spellbook has been studied */
+    int newwarncnt;         /* tally how many monsters a glow warning artifact is currently warning of */
     unsigned oeaten;        /* nutrition left in food, if partly eaten */
-#define lastwarncnt oeaten  /* How many monsters a glow warning artifact was last warning of */
+    unsigned lastwarncnt;   /* tally how many monsters a glow warning artifact was last warning of */
     long age;               /* creation date */
     long owornmask;
     struct oextra *oextra;  /* pointer to oextra struct */
@@ -329,7 +328,7 @@ struct obj {
     ((obj)->otyp >= FIRST_DRAGON_SCALES && (obj)->otyp <= LAST_DRAGON_SCALES)
 /* Note: dragonscales is corpsenm, and corpsenm is usually initialized to
  * NON_PM, which is -1. Thus, check for > 0 rather than just nonzero. */
-#define Is_dragon_scaled_armor(obj)                \
+#define Is_dragon_scaled_armor(obj) \
     (is_suit(obj) && (obj)->dragonscales > 0)
 #define Is_dragon_armor(obj) \
     (Is_dragon_scales(obj) || Is_dragon_scaled_armor(obj))

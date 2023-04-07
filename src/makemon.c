@@ -695,7 +695,8 @@ unsigned short chance;
                     obj->spe = (obj->spe * rn2(chance)) / chance;
                 }
                 if (mtmp->m_lev > 19) {
-                    if (objects[obj->otyp].oc_armcat == ARM_SUIT) {
+                    if (obj->oclass == ARMOR_CLASS
+                        && objects[obj->otyp].oc_armcat == ARM_SUIT) {
                         obj->dragonscales = rnd_class(FIRST_DRAGON_SCALES,
                                                       LAST_DRAGON_SCALES - 1);
                         if (monsndx(mtmp->data) == PM_WIZARD) {
@@ -1369,7 +1370,7 @@ register struct monst *mtmp;
                and maybe make it special */
             int typ = rn2(2) ? LONG_SWORD : HEAVY_MACE;
             otmp = mksobj(typ, FALSE, FALSE);
-            if ((!rn2(20) || is_lord(ptr) || is_prince(ptr))
+            if ((!rn2(20) || is_lord(ptr))
                 && sgn(mtmp->isminion ? EMIN(mtmp)->min_align
                                       : ptr->maligntyp) == A_LAWFUL) {
                 otmp = oname(otmp, artiname(typ == LONG_SWORD
@@ -1392,6 +1393,23 @@ register struct monst *mtmp;
             otmp->oerodeproof = TRUE;
             otmp->spe = 0;
             (void) mpickobj(mtmp, otmp);
+
+            /* Saint Michael */
+            if (is_prince(ptr)) {
+                struct obj* received;
+                int item;
+
+                item = RUNESWORD;
+                otmp = mksobj(item, FALSE, FALSE);
+                bless(otmp);
+                otmp->oerodeproof = TRUE;
+                otmp->spe = rn2(3) + 5;
+                otmp->oprops = ITEM_FIRE;
+                (void) mpickobj(mtmp, otmp);
+                received = m_carrying(mtmp, item);
+                if (received)
+                    set_material(received, SILVER);
+            }
             /* some insurance against 'purple rain' */
             if (on_level(&astral_level, &u.uz) && !rn2(3)) {
                 otmp = mksobj(RIN_SLOW_DIGESTION, FALSE, FALSE);
@@ -3597,16 +3615,30 @@ int otyp;
         /* leaders don't tolerate inferior quality battle gear
          * in fact, they don't settle for non-enchanted gear period */
         if (is_prince(mtmp->data)) {
-            if (otmp->oclass == WEAPON_CLASS && otmp->spe < 1)
+            if (otmp->oclass == WEAPON_CLASS && otmp->spe < 1) {
                 otmp->spe = rn2(3) + 1;
-            else if (otmp->oclass == ARMOR_CLASS && otmp->spe < 1)
+                otmp->oeroded = otmp->oeroded2 = 0;
+                if (!rn2(5))
+                    otmp->oerodeproof = TRUE;
+            } else if (otmp->oclass == ARMOR_CLASS && otmp->spe < 1) {
                 otmp->spe = mtmp->iswiz ? rn2(2) : rn2(4) + 1;
+                otmp->oeroded = otmp->oeroded2 = 0;
+                if (!rn2(5))
+                    otmp->oerodeproof = TRUE;
+            }
         }
         if (is_lord(mtmp->data)) {
-            if (otmp->oclass == WEAPON_CLASS && otmp->spe < 1)
+            if (otmp->oclass == WEAPON_CLASS && otmp->spe < 1) {
                 otmp->spe = rn2(2) + 1;
-            else if (otmp->oclass == ARMOR_CLASS && otmp->spe < 1)
+                otmp->oeroded = otmp->oeroded2 = 0;
+                if (!rn2(8))
+                    otmp->oerodeproof = TRUE;
+            } else if (otmp->oclass == ARMOR_CLASS && otmp->spe < 1) {
                 otmp->spe = rn2(2) + 1;
+                otmp->oeroded = otmp->oeroded2 = 0;
+                if (!rn2(8))
+                    otmp->oerodeproof = TRUE;
+            }
         }
 
         /* Medusa's bow and arrows are also high quality */

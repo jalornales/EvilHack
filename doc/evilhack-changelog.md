@@ -2634,4 +2634,131 @@ The following changes to date are:
 - Identity of the Riders hidden via farlook or 'More info about' prompt
 - Fix: thrown potions of polymorph by hostiles at hero that hit peacefuls
   anger them
+- Fix: cure sickness being cast on a peaceful monster that wasn't sick would
+  anger it
+- Fix: queen ants were laying queen ant eggs
+- Fix: higher level tourist player monsters spawning with eggs that could
+  hatch S_ORC type monsters
+- Fix: giant crocodiles and their eggs
+- Goblin King feedback if the player is wielding Orcrist or Glamdring
+- Fix: memory leak in oracle-3 map
+- Fix: mon_currwep not set to NULL if the monsters wielded weapon was made
+  of glass and it shattered
+- Fix: heap-use-after-free when projectiles rusted away on passive rust attack
+- Fix: Grimtooth's instakill vs elves
+- Intelligent peacefuls avoid digging shop or temple walls
+- Fix: disarming swallowed hero
+- Fix: mkgate() was called every time the Amulet of Yendor was dropped and
+  picked back up while in the Sanctum
+- Fix: feedback when attacking with certain artifacts (Angelslayer, Grimtooth,
+  the Sword of Annihilation)
+- Fix: prevent Lucifer from escaping the Sanctum
+- Fix: domonability declared twice in extern.h
+- Fix: ancient subroom location bug
+- Fix: teleported water creature hiding in dry land
+- Reimplement damage bonus from worn gloves enchantment if fighting bare-handed
+- Generate random eroded, erodeproof, or greased items
+- Fix: missing period
+- Reading a blessed scroll of amnesia allows option to reset accumulated skills 
+- Fix: prevent Valley of the Dead bones files
+- Fix: worn rings covered by worn gloves could do material damage to monsters
+- Tweak to Valley of the Dead bones files
+- Fix: don't allow non-artifact sacrifice gifts to spawn with erosion
+- Prevent certain items from random erosion
+- Fix: monsters could jump into poly traps when trapped
+- Fix: suppress Hand of Vecna cold-based attack if target is already dead
+- Update to 'monsters could jump into poly traps when trapped'
+- Fix: containers flagged as waterproof were not subject to water damage
+- Allow food appraisal intrinsic to warn against the Eye of Vecna
+- Tweaks to maybe_unhide_at()
+- More tweaks to maybe_unhide_at()
+- Fix: splash screen (windows build, GUI)
+- Another attempt to fix the windows GUI splash screen
+- Fix: missing bracket for Lucifer tile entry
+- Fix: do not allow the Idol of Moloch to be cancelled
+
+
+### Version 0.8.2
+
+- Latest merges from 'vanilla' NetHack 3.6.7 official release (as of February 16th, 2023)
+- Initial preparation for new version (0.8.2)
+- Prevent bypassing demon boss lairs via level teleport
+- Tweak feedback if killing yourself from a cursed weapon
+- Fix: logic in amulet/tool naming after 3.6.7 merge
+- Fix: the Riders being disintegrated and not leaving a corpse
+- Fix: monster jumping logic
+- Monsters flagged as a lord/prince don't spawn with eroded gear
+- Fix: Infidel role - repeatedly chatting with your quest leader causes
+  'completed his/her quest without incident' livelog to run every time
+- Fix: track the Idol of Moloch's imbuement properly
+- Fix: 'potentially uninitialized local pointer' from last commit
+- Fix: describing barding
+- Fix: object materials - several wish parsing bugs
+- Fix: x-ray vision issues when using multiple objects that grant it
+  at the same time
+- Fix: dwarvish monks that started with a pick-axe were wielding it
+- Fix: artifacts warning of monsters would flicker on/off for every
+  monster kill
+- Shield skill
+- Utilize shield skill to shield bash monsters the player is attacking
+- Prevent shield from being taken away via dwarvish bearded axe attack
+  if expert skill or higher in shields
+- Wand of wishing in explore mode charges
+- Some descriptive miss messages for thrown/fired objects at the player
+- Fix: crash if attacking bare-handed and not wearing a shield if role
+  has shield skill
+- Tortle shamans are telepathic and will grant telepathy intrinsic if eaten
+- Gnomes hate eggs
+- Fix: some 'gnomes hate eggs' tweaks
+- Adjust Wizard of Yendor resurrecting back to normal odds
+- Regular eggs have a small chance to cancel gnomes
+- Mind flayer larva victims, if peaceful, will become hostile when turned
+  into a mind flayer
+- Fix: wrong deity was made upset if caught trying to ascend while wearing
+  a helm of opposite alignment
+- Fix: paranoid swim would kick in while phasing under certain conditions
+- Remove unnecessary code from in_hell_effects() and in_iceq_effects()
+- Fix: illithids receiving metallic helmets for sacrifice gifts
+- Tweak to last commit (illithids and metallic helmets as sacrifice gift)
+- Huge or gigantic monsters on a pool/lava tile will not be instakilled
+  if a boulder fills up the pool/lava spot
+- Fix: engraving with a bladed weapon or magic marker would not update
+  permanent inventory
+- Fix: objects created with an object property would sometimes be blessed
+  and cursed simultaneously
+- Fix: corrections to separate_steed_and_rider() function
+- Fix: forged objects having an object property when they shouldn't
+- Fix: player poly'd into a centaur reported incorrect body parts
+- Fix: tweak to forged objects having an object property when they shouldn't
+- Fix: multishot bonuses with various races
+- Fix: locking then unlocking the Sokoban closet doors prevents them from
+  being sealed
+- Fix: inconsistent attack behavior while submerged in water
+- Follow up to 'inconsistent attack behavior while submerged in water'
+- m_canseeu() allows seeing the player underwater
+- Being underwater (player or monster) provides protection against fire/acid
+  attacks
+- Fix: heap-use-after-free when tipping a container with a wand of
+  cancellation into a bag of holding
+- Fix: worn chromatic dragon scales as a giant could be destroyed if poly'd
+  into a smaller monster and then revert back to giant form
+- Fix: Izchak keeps transforming back into angelic form after every death
+- Fix: some follow-up to last commit (Izchak and angelic form)
+- Fix: zombie bite attack slipping off of a greased/oilskin helm feedback
+- Fix: player monsters inheriting race flags from the player 
+- Fix: remove urace test from player race macros
+- Fix: prevent forging an object if neither base objects material is valid
+- Fix: multiple objects in a stack highlighting
+- Fix: refactor and fix various bugs in artifact_hit() function
+- Fix: Giant race using a club damage bonus was applied to every weapon
+- Fix: armor losing fooproofing via a monsters 'destroy armor' spell was
+  not updated in perm_invent (curses)
+- Fix: grammar when welcoming the player back to a saved game
+- Fix: help prevent inherently fixed objects from spawning eroded/corroded
+- Make the archangel Saint Michael a unique monster
+- Fix: stealth and waking nearby monsters during combat
+- Fix: missing race from 'Dark Knight' template
+- Create new artifact flag and macro (SPFX_FORGED and is_forged_artifact())
+- Gauntlets of Purity tweaks
+- Fix: more separate_steed_and_rider() tweaks, other monster/steed tweaks
 

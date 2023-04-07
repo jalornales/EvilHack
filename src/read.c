@@ -1150,7 +1150,7 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
                         setnotworn(armor);
                         /* don't allow a suit of armor with an object property
                            to co-exist with merged dragon scales */
-                        if ((armor->oprops & ITEM_PROP_MASK) != 0) {
+                        if ((armor->oprops & ITEM_PROP_MASK) != 0L) {
                             oprops_off(armor, W_ARM);
                             armor->oprops &= ~(ITEM_PROP_MASK);
                         }
@@ -1799,20 +1799,31 @@ struct obj *sobj; /* sobj - scroll or fake spellbook for spell */
         break;
     case SCR_AMNESIA:
         known = TRUE;
-        if (is_illithid(youmonst.data)) {
-            Your("psionic abilities ward off the scroll's magic.");
-            break;
+        if (sblessed && ACURR(A_INT) > 12) {
+            if (yn("Do you want to reset your skills training?") != 'y') {
+                goto forget_routine;
+            } else {
+                Your("skills training has been reset.");
+                reset_weapon_skills();
+                break;
+            }
         } else {
-            forget((!sblessed ? ALL_SPELLS : 0));
-            if (Hallucination) /* Ommmmmm! */
-                Your("mind releases itself from mundane concerns.");
-            else if (!strncmpi(plname, "Maud", 4))
-                pline("As your mind turns inward on itself, you forget everything else.");
-            else if (rn2(2))
-                pline("Who was that Maud person anyway?");
-            else
-                pline("Thinking of Maud you forget everything else.");
-            exercise(A_WIS, FALSE);
+ forget_routine:
+            if (maybe_polyd(is_illithid(youmonst.data), Race_if(PM_ILLITHID))) {
+                Your("psionic abilities ward off the scroll's magic.");
+                break;
+            } else {
+                forget((!sblessed ? ALL_SPELLS : 0));
+                if (Hallucination) /* Ommmmmm! */
+                    Your("mind releases itself from mundane concerns.");
+                else if (!strncmpi(plname, "Maud", 4))
+                    pline("As your mind turns inward on itself, you forget everything else.");
+                else if (rn2(2))
+                    pline("Who was that Maud person anyway?");
+                else
+                    pline("Thinking of Maud you forget everything else.");
+                exercise(A_WIS, FALSE);
+            }
         }
         break;
     case SCR_FIRE: {

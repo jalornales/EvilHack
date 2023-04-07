@@ -560,6 +560,28 @@ register struct monst *mtmp;
         return FALSE;
     }
 
+    if (Underwater && !is_pool(mtmp->mx, mtmp->my)) {
+        ; /* no attack, hero will still attempt to move onto solid ground */
+        return FALSE;
+    }
+
+    if (Underwater
+        && (!grounded(mtmp->data) || can_levitate(mtmp) || can_wwalk(mtmp))
+        && is_pool(mtmp->mx, mtmp->my)) {
+        char pnambuf[BUFSZ];
+
+        /* save its current description in case of polymorph */
+        Strcpy(pnambuf, y_monnam(mtmp));
+        mtmp->mtrapped = 0;
+        remove_monster(mtmp->mx, mtmp->my);
+        place_monster(mtmp, u.ux0, u.uy0);
+        newsym(mtmp->mx, mtmp->my);
+        newsym(u.ux0, u.uy0);
+
+        You("swim underneath %s.", pnambuf);
+        return FALSE;
+    }
+
     if (Upolyd)
         (void) hmonas(mtmp, NON_PM, TRUE);
     else
@@ -744,6 +766,9 @@ struct attack *uattk;
     int dieroll = rnd(20), oldumort = u.umortality;
     int mhit = (tmp > dieroll || u.uswallow);
     int dmg_wep = (uwep ? dmgval(uwep, &youmonst) : 0);
+    int bash_chance = (P_SKILL(P_SHIELD) == P_MASTER ? !rn2(3) :
+                       P_SKILL(P_SHIELD) == P_EXPERT ? !rn2(4) :
+                       P_SKILL(P_SHIELD) == P_SKILLED ? !rn2(6) : !rn2(8));
 
     /* using cursed weapons can sometimes do unexpected things.
        no need to set a condition for cursed secondary weapon
@@ -753,6 +778,8 @@ struct attack *uattk;
         if (!rn2(5)) {
             You("swing wildly and miss!");
         } else {
+            char tmpbuf[BUFSZ];
+
             Your("cursed %s turns against you!", simpleonames(uwep));
             You("hit yourself in the %s!", body_part(FACE));
             if (uwep->oartifact
@@ -770,7 +797,8 @@ struct attack *uattk;
                 searmsg(&youmonst, &youmonst, uwep, FALSE);
                 exercise(A_CON, FALSE);
             }
-            losehp(dmg_wep, "hitting themselves in the face", KILLED_BY);
+            Sprintf(tmpbuf, "hitting %sself in the face", uhim());
+            losehp(dmg_wep, tmpbuf, KILLED_BY);
         }
         return 0;
     }
@@ -847,8 +875,8 @@ struct attack *uattk;
        or greater in martial arts */
     if (!rn2(3) && !uwep && Role_if(PM_MONK)
         && P_SKILL(P_MARTIAL_ARTS) >= P_MASTER
-        && !(u.usteed || u.uswallow || multi < 0
-             || u.umortality > oldumort
+        && !(u.usteed || u.uswallow || u.uinwater
+             || multi < 0 || u.umortality > oldumort
              || !malive || m_at(x, y) != mon)) {
         if (weararmor) {
             if (!rn2(8))
@@ -879,6 +907,24 @@ struct attack *uattk;
                 kick_monster(mon, x, y);
         }
     }
+
+    /* random shield bash if wearing a shield and are skilled
+       in using shields */
+    if (bash_chance
+        && wearshield && P_SKILL(P_SHIELD) >= P_BASIC
+        && !(multi < 0 || u.umortality > oldumort
+             || u.uinwater || !malive || m_at(x, y) != mon)) {
+        tmp = find_roll_to_hit(mon, uattk->aatyp, wearshield, &attknum,
+                               &armorpenalty);
+        dieroll = rnd(20);
+        mhit = (tmp > dieroll || u.uswallow);
+        malive = known_hitum(mon, wearshield, &mhit, tmp, armorpenalty, uattk,
+                             dieroll);
+        /* second passive counter-attack only occurs if second attack hits */
+        if (mhit)
+            (void) passive(mon, wearshield, mhit, malive, AT_WEAP, FALSE);
+    }
+
 
     /* Your race may grant extra attacks. Illithids don't use
      * their tentacle attack every turn, Centaurs are strong
@@ -980,6 +1026,8 @@ int dieroll;
     boolean hand_to_hand = (thrown == HMON_MELEE
                             /* not grapnels; applied implies uwep */
                             || (thrown == HMON_APPLIED && is_pole(uwep)));
+    boolean is_rogue = (Role_if(PM_ROGUE) && !Upolyd);
+    boolean wield_shadowblade = (uwep && uwep->oartifact == ART_SHADOWBLADE);
     int jousting = 0;
     int joustdmg;
     struct obj *hated_obj = NULL;
@@ -990,12 +1038,17 @@ int dieroll;
 
     saved_oname[0] = '\0';
 
-    /* Awaken nearby monsters. A stealthy hero makes much less noise */
+    /* Awaken nearby monsters. A stealthy hero makes much less noise,
+       playing as a rogue or wielding Shadowblade even less so */
     if (!(is_silent(youmonst.data) && helpless(mon))
-        && rn2(Stealth ? 10 : 2)) {
+        && !rn2(wield_shadowblade ? 40
+                                  : is_rogue ? 20
+                                             : Stealth ? 10
+                                                       : 2)) {
         int base_combat_noise = combat_noise(&mons[urace.malenum]);
-        wake_nearto(mon->mx, mon->my, Stealth ? base_combat_noise / 2
-                                              : base_combat_noise);
+        wake_nearto(mon->mx, mon->my, is_rogue ? base_combat_noise / 4
+                                               : Stealth ? base_combat_noise / 2
+                                                         : base_combat_noise);
     }
 
     wakeup(mon, TRUE);
@@ -1047,6 +1100,10 @@ int dieroll;
                 monflee(mon, d(2, 3), TRUE, TRUE);
             hittxt = TRUE;
         }
+
+        /* fighting with fists will get the gloves' bonus... */
+        if (!uwep && uarmg)
+            tmp += uarmg->spe;
 
         /* Blessed gloves give bonuses when fighting 'bare-handed'.  So do
            rings or gloves made of a hated material.  Note:  rings are worn
@@ -1104,12 +1161,13 @@ int dieroll;
                 }
             } else {
                 tmp = dmgval(obj, mon);
-                /* Giants are more effective with a club.
+                /* Giants are more effective with club-like weapons.
                  * For example, a caveman's starting +1 club will do an average
                  * of 4.444 rather than 3 against large monsters, and 6.4725
                  * rather than 4.5 against small.
                  **/
                 if (maybe_polyd(is_giant(youmonst.data), Race_if(PM_GIANT))
+                    && objects[obj->otyp].oc_skill == P_CLUB
                     && !noncorporeal(mdat)) {
                     int tmp2 = dmgval(obj, mon);
                     if (tmp < tmp2)
@@ -1271,6 +1329,37 @@ int dieroll;
                         hated_obj = obj;
                     }
                     break;
+                case SMALL_SHIELD:
+                case ELVEN_SHIELD:
+                case URUK_HAI_SHIELD:
+                case ORCISH_SHIELD:
+                case LARGE_SHIELD:
+                case DWARVISH_ROUNDSHIELD:
+                case SHIELD_OF_REFLECTION:
+                case SHIELD_OF_LIGHT:
+                case SHIELD_OF_MOBILITY:
+                    if (uarms && P_SKILL(P_SHIELD) >= P_BASIC) {
+                         /* dmgval for shields is just one point,
+                            plus whatever material damage applies */
+                        tmp = dmgval(obj, mon);
+
+                        /* add extra damage based on the type
+                           of shield */
+                        if (obj->otyp == SMALL_SHIELD)
+                            tmp += rn2(3) + 1;
+                        else
+                            tmp += rn2(6) + 2;
+
+                        /* sprinkle on a bit more damage if
+                           shield skill is high enough */
+                        if (P_SKILL(P_SHIELD) >= P_EXPERT)
+                            tmp += rnd(4);
+                    }
+                    if (mon_hates_material(mon, obj->material)) {
+                        /* dmgval() already added damage, but track hated_obj */
+                        hated_obj = obj;
+                    }
+                    break;
                 case MIRROR:
                     if (breaktest(obj)) {
                         You("break %s.  That's bad luck!", ysimple_name(obj));
@@ -1378,6 +1467,20 @@ int dieroll;
                             obj->owt = weight(obj);
                             if (thrown)
                                 place_object(obj, mon->mx, mon->my);
+                        } else if (obj->corpsenm == NON_PM && is_gnome(mdat)
+                                   && !is_undead(mdat)) {
+                            /* chicken eggs are deadly poison to gnomes */
+                            if (!is_silent(mdat))
+                                wake_nearto(mon->mx, mon->my, mon->data->mlevel * 10);
+                            /* not as much damage as ingesting, but still hurts */
+                            tmp = d(4, 5);
+                            if (!DEADMONSTER(mon)) {
+                                /* small chance of cancellation (Tik Tok of Oz) */
+                                if (!rn2(10))
+                                    (void) cancel_monst(mon, obj, TRUE, FALSE, FALSE);
+                                monflee(mon, d(4, 8) + 20, FALSE, TRUE);
+                            }
+                            useup_eggs(obj);
                         } else {
                             pline("Splat!");
                             useup_eggs(obj);
@@ -1725,19 +1828,33 @@ int dieroll;
                              || (Race_if(PM_ILLITHID) && !Upolyd))) {
             You("claw %s%s", mon_nam(mon),
                 canseemon(mon) ? exclam(tmp) : ".");
-        } else
-            You("%s %s%s",
-                (obj && (is_shield(obj) || is_whack(obj)))
-                ? wep_whack[rn2(SIZE(wep_whack))] : (obj && is_pierce(obj))
-                    ? wep_pierce[rn2(SIZE(wep_pierce))] : (obj && is_slash(obj))
-                        ? wep_slash[rn2(SIZE(wep_slash))] : "hit",
-                mon_nam(mon), canseemon(mon) ? exclam(tmp) : ".");
+        } else {
+            if (obj && (obj == uarms) && is_shield(obj)) {
+                You("bash %s with %s%s",
+                    mon_nam(mon), ysimple_name(obj),
+                    canseemon(mon) ? exclam(tmp) : ".");
+                /* placing this here, because order of events */
+                if (!rn2(10) && P_SKILL(P_SHIELD) >= P_EXPERT) {
+                    if (canspotmon(mon))
+                        pline("%s %s from the force of your blow!",
+                              Monnam(mon), makeplural(stagger(mdat, "stagger")));
+                    mon->mstun = 1;
+                }
+            } else {
+                You("%s %s%s",
+                    (obj && (is_shield(obj) || is_whack(obj)))
+                    ? wep_whack[rn2(SIZE(wep_whack))] : (obj && is_pierce(obj))
+                        ? wep_pierce[rn2(SIZE(wep_pierce))] : (obj && is_slash(obj))
+                            ? wep_slash[rn2(SIZE(wep_slash))] : "hit",
+                    mon_nam(mon), canseemon(mon) ? exclam(tmp) : ".");
+           }
+        }
     }
 
     /* The Hand of Vecna imparts cold damage to attacks,
        whether bare-handed or wielding a weapon */
-    if (uarmg && uarmg->oartifact == ART_HAND_OF_VECNA
-        && hand_to_hand) {
+    if (!destroyed && uarmg
+        && uarmg->oartifact == ART_HAND_OF_VECNA && hand_to_hand) {
         if (!Blind)
             pline("%s covers %s in frost!", The(xname(uarmg)),
                   mon_nam(mon));
@@ -1851,6 +1968,13 @@ int dieroll;
     if (!destroyed) {
         print_mon_wounded(mon, saved_mhp);
     }
+
+#if 0
+    /* debug pline to verify damage dealt from whatever
+       object hits its target */
+    if (wizard)
+        pline("Damage from %s: %d.", simpleonames(obj), tmp);
+#endif
 
     return destroyed ? FALSE : TRUE;
 }
@@ -1986,9 +2110,11 @@ struct attack *mattk;
                 || (obj->oprops & ITEM_OILSKIN))
         && (!obj->cursed || rn2(3))) {
         pline_The("%s %s %s %s!",
-                  (mattk->adtyp == AD_WRAP
-                   && youmonst.data != &mons[PM_SALAMANDER]) ? "attack slips off of"
-                                                             : "attack cannot hold onto",
+                  ((mattk->adtyp == AD_WRAP
+                    && youmonst.data != &mons[PM_SALAMANDER])
+                   || (mattk->adtyp == AD_DRIN && is_zombie(youmonst.data)))
+                     ? "attack slips off of"
+                     : "attack cannot hold onto",
                   s_suffix(mon_nam(mdef)), obj->greased ? "greased" : "slippery",
                   /* avoid "slippery slippery cloak"
                      for undiscovered oilskin cloak */
@@ -2398,7 +2524,8 @@ int specialdmg; /* blessed and/or silver bonus against various things */
     /* since hero can't be cancelled, only defender's armor applies */
     negated = !(rn2(10) >= 3 * armpro);
 
-    if (is_demon(youmonst.data) && !rn2(13) && !uwep
+    if (maybe_polyd(is_demon(youmonst.data), Race_if(PM_DEMON))
+        && !rn2(13) && !uwep
         && u.umonnum != PM_SUCCUBUS && u.umonnum != PM_INCUBUS
         && u.umonnum != PM_BALROG && u.umonnum != PM_DEMON) {
         demonpet();
@@ -2498,7 +2625,8 @@ int specialdmg; /* blessed and/or silver bonus against various things */
             break;
         }
         if (!Blind)
-            pline("%s is %s!", Monnam(mdef), on_fire(mdef, mattk->aatyp == AT_HUGS ? ON_FIRE_HUG : ON_FIRE));
+            pline("%s is %s!", Monnam(mdef),
+                  on_fire(mdef, mattk->aatyp == AT_HUGS ? ON_FIRE_HUG : ON_FIRE));
         if (completelyburns(pd)) { /* paper golem or straw golem */
             if (!Blind)
                 pline("%s burns completely!", Monnam(mdef));
@@ -2511,9 +2639,12 @@ int specialdmg; /* blessed and/or silver bonus against various things */
             break;
             /* Don't return yet; keep hp<1 and tmp=0 for pet msg */
         }
-        tmp += destroy_mitem(mdef, SCROLL_CLASS, AD_FIRE);
-        tmp += destroy_mitem(mdef, SPBOOK_CLASS, AD_FIRE);
-        if (resists_fire(mdef) || defended(mdef, AD_FIRE)) {
+        if (!mon_underwater(mdef)) {
+            tmp += destroy_mitem(mdef, SCROLL_CLASS, AD_FIRE);
+            tmp += destroy_mitem(mdef, SPBOOK_CLASS, AD_FIRE);
+        }
+        if (resists_fire(mdef) || defended(mdef, AD_FIRE)
+            || mon_underwater(mdef)) {
             if (!Blind)
                 pline_The("fire doesn't heat %s!", mon_nam(mdef));
             golemeffects(mdef, AD_FIRE, tmp);
@@ -2603,7 +2734,8 @@ int specialdmg; /* blessed and/or silver bonus against various things */
         tmp += destroy_mitem(mdef, RING_CLASS, AD_ELEC);
         break;
     case AD_ACID:
-        if (resists_acid(mdef) || defended(mdef, AD_ACID))
+        if (resists_acid(mdef) || defended(mdef, AD_ACID)
+            || mon_underwater(mdef))
             tmp = 0;
         break;
     case AD_STON:
@@ -3934,7 +4066,7 @@ boolean wep_was_destroyed;
      */
     switch (mattk[i].adtyp) {
     case AD_FIRE:
-        if (mhit && !mon->mcan) {
+        if (mhit && !mon->mcan && !Underwater) {
             if (aatyp == AT_KICK) {
                 if (uarmf && !rn2(6))
                     (void) erode_obj(uarmf, xname(uarmf), ERODE_BURN,
@@ -3952,14 +4084,16 @@ boolean wep_was_destroyed;
                 You("are splashed by %s %s!", s_suffix(mon_nam(mon)),
                     hliquid("acid"));
 
-            if (!Acid_resistance)
+            if (!(Acid_resistance || Underwater))
                 mdamageu(mon, tmp);
             else
                 monstseesu(M_SEEN_ACID);
-            if (!rn2(30))
-                erode_armor(&youmonst, ERODE_CORRODE);
+            if (!Underwater) {
+                if (!rn2(30))
+                    erode_armor(&youmonst, ERODE_CORRODE);
+            }
         }
-        if (mhit) {
+        if (mhit && !Underwater) {
             if (aatyp == AT_KICK) {
                 if (uarmf && !rn2(6))
                     (void) erode_obj(uarmf, xname(uarmf), ERODE_CORRODE,
@@ -4234,7 +4368,8 @@ boolean wep_was_destroyed;
             break;
         case AD_FIRE:
             if (monnear(mon, u.ux, u.uy)) {
-                if (how_resistant(FIRE_RES) == 100) {
+                if (how_resistant(FIRE_RES) == 100
+                    || Underwater) {
                     shieldeff(u.ux, u.uy);
                     monstseesu(M_SEEN_FIRE);
                     You_feel("mildly warm.");
@@ -4459,7 +4594,8 @@ boolean wep_was_destroyed;
                 }
                 break;
             case RED_DRAGON_SCALES:
-                if (how_resistant(FIRE_RES) == 100) {
+                if (how_resistant(FIRE_RES) == 100
+                    || Underwater) {
                     shieldeff(u.ux, u.uy);
                     monstseesu(M_SEEN_FIRE);
                     You_feel("mildly warm from %s armor.",
@@ -4531,20 +4667,20 @@ struct attack *mattk;     /* null means we find one internally */
 
     switch (mattk->adtyp) {
     case AD_FIRE:
-        if (!rn2(6) && !mon->mcan
+        if (!rn2(6) && !mon->mcan && !Underwater
             /* steam vortex: fire resist applies, fire damage doesn't */
             && mon->data != &mons[PM_STEAM_VORTEX]) {
             ret = erode_obj(obj, NULL, ERODE_BURN, EF_GREASE | EF_DESTROY);
         }
         break;
     case AD_ACID:
-        if (!rn2(6)) {
+        if (!rn2(6) && !Underwater) {
             ret = erode_obj(obj, NULL, ERODE_CORRODE, EF_GREASE | EF_DESTROY);
         }
         break;
     case AD_RUST:
         if (!mon->mcan) {
-            (void) erode_obj(obj, (char *) 0, ERODE_RUST, EF_GREASE | EF_DESTROY);
+            ret = erode_obj(obj, (char *) 0, ERODE_RUST, EF_GREASE | EF_DESTROY);
         }
         break;
     case AD_CORR:

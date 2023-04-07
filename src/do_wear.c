@@ -2313,11 +2313,17 @@ boolean noisy;
                 pline_The("%s are too rigid to wear.",
                           gloves_simple_name(otmp));
             err++;
-        } else if (!wizard && u.ualign.record < 20
+        } else if (!wizard
+                   && (u.ualign.record < 20 || Role_if(PM_INFIDEL))
                    && otmp->oartifact == ART_GAUNTLETS_OF_PURITY) {
-            if (noisy)
-                You("are not pure enough to wear these %s.",
-                    gloves_simple_name(otmp));
+            if (noisy) {
+                if (Role_if(PM_INFIDEL))
+                    pline_The("%s sense your wickedness, and refuse to be worn!",
+                              xname(otmp));
+                else
+                    You("are not pure enough to wear these %s.",
+                        gloves_simple_name(otmp));
+            }
             err++;
         } else
             *mask = W_ARMG;
@@ -2684,7 +2690,6 @@ find_ac()
                               ? 6 : Race_if(PM_TORTLE)
                                   ? 0 : mons[u.umonnum].ac);
 
-
     /* armor class from worn gear */
 
     int racial_bonus, dex_adjust_ac, tortle_ac;
@@ -2735,6 +2740,15 @@ find_ac()
 
     if (uarms) {
         uac -= armor_bonus(uarms);
+        if (P_SKILL(P_SHIELD) == P_BASIC)
+            uac -= 1;
+        else if (P_SKILL(P_SHIELD) == P_SKILLED)
+            uac -= 3;
+        else if (P_SKILL(P_SHIELD) == P_EXPERT)
+            uac -= 5;
+        else if (P_SKILL(P_SHIELD) == P_MASTER)
+            uac -= 8;
+
         if ((Race_if(PM_ORC)
              && (uarms->otyp == ORCISH_SHIELD
                  || uarms->otyp == URUK_HAI_SHIELD))

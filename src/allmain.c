@@ -395,15 +395,16 @@ boolean resuming;
                     if (u.uen < u.uenmax
                         && ((wtcap < MOD_ENCUMBER
                              && (!(moves % ((MAXULEV + 8 - u.ulevel)
-                                            * ((Role_if(PM_WIZARD) || Role_if(PM_INFIDEL))
-                                                       ? 3 : 4)
-                                            / 6)))) || Energy_regeneration
-                    /* the Idol grants energy regen to piously unaligned;
-                     * it really shouldn't be restricted to Infidels,
-                     * but so far we have no other unaligned roles */
+                                            * ((Role_if(PM_WIZARD)
+                                                || Role_if(PM_INFIDEL))
+                                                ? 3 : 4) / 6))))
+                            || Energy_regeneration
+                            /* the Idol grants energy regen to piously unaligned;
+                             * it really shouldn't be restricted to Infidels,
+                             * but so far we have no other unaligned roles */
                             || (Role_if(PM_INFIDEL) && u.uhave.questart
-                               && u.ualign.type == A_NONE
-                               && u.ualign.record > rn2(20)))) {
+                                && u.ualign.type == A_NONE
+                                && u.ualign.record > rn2(20)))) {
                         u.uen += rn1(
                             (int) (ACURR(A_WIS) + ACURR(A_INT)) / 15 + 1, 1);
                         if (u.uen > u.uenmax)
@@ -676,10 +677,14 @@ boolean resuming;
 
         /* The Gauntlets of Purity cannot stay worn if
            our hero isn't pious */
-        if (!wizard && u.ualign.record < 20 && uarmg
-            && uarmg->oartifact == ART_GAUNTLETS_OF_PURITY) {
-            pline_The("%s sense your impiety, and remove themselves from your %s!",
-                      artiname(uarmg->oartifact), makeplural(body_part(HAND)));
+        if (!wizard
+            && (u.ualign.record < 20 || (u.ualign.type <= A_CHAOTIC && !rn2(2000)))
+            && uarmg && uarmg->oartifact == ART_GAUNTLETS_OF_PURITY) {
+            pline_The("%s %s, and remove themselves from your %s!",
+                      artiname(uarmg->oartifact),
+                      u.ualign.record < 20 ? "sense your impiety"
+                                           : "discerns your impurity",
+                      makeplural(body_part(HAND)));
             /* gauntlets forced off but stay in inventory */
             (void) Gloves_off();
             /* any wielded/worn objects are forced to drop,
@@ -1048,17 +1053,23 @@ boolean new_game; /* false => restoring an old game */
      */
     *buf = '\0';
     if (new_game || u.ualignbase[A_ORIGINAL] != u.ualignbase[A_CURRENT])
-        Sprintf(eos(buf), "%s", an(align_str(u.ualignbase[A_ORIGINAL])));
+        Sprintf(eos(buf), " %s", align_str(u.ualignbase[A_ORIGINAL]));
     if (!urole.name.f
         && (new_game
                 ? (urole.allow & ROLE_GENDMASK) == (ROLE_MALE | ROLE_FEMALE)
                 : currentgend != flags.initgend))
         Sprintf(eos(buf), " %s", genders[currentgend].adj);
+    Sprintf(eos(buf), " %s %s", urace.adj,
+            (currentgend && urole.name.f) ? urole.name.f : urole.name.m);
 
-    pline(new_game ? "%s %s, welcome to EvilHack!  You are %s %s %s."
-                   : "%s %s, the%s %s %s, welcome back to EvilHack!",
-          Hello((struct monst *) 0), plname, buf, urace.adj,
-          (currentgend && urole.name.f) ? urole.name.f : urole.name.m);
+    if (u.ualign.type == A_NONE)
+        pline(new_game ? "%s %s, welcome to EvilHack!  You are an%s."
+                       : "%s %s, the%s, welcome back to EvilHack!",
+              Hello((struct monst *) 0), plname, buf);
+    else
+        pline(new_game ? "%s %s, welcome to EvilHack!  You are a%s."
+                       : "%s %s, the%s, welcome back to EvilHack!",
+              Hello((struct monst *) 0), plname, buf);
 }
 
 #ifdef POSITIONBAR

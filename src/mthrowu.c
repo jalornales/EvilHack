@@ -88,9 +88,28 @@ const char *name; /* if null, then format `*objp' */
         } else if (u.uac + tlev <= dieroll - 2) {
             if (onm != onmbuf)
                 Strcpy(onmbuf, onm); /* [modifiable buffer for upstart()] */
-            pline("%s %s you.", upstart(onmbuf), vtense(onmbuf, "miss"));
+            if ((thick_skinned(youmonst.data)
+                 || (!Upolyd && Race_if(PM_TORTLE))) && rn2(2)) {
+                Your("%s %s %s.",
+                     (is_dragon(youmonst.data) ? "scaly hide"
+                                               : (youmonst.data == &mons[PM_GIANT_TURTLE]
+                                                  || Race_if(PM_TORTLE))
+                                                   ? "protective shell"
+                                                   : "thick hide"),
+                      (rn2(2) ? "blocks" : "deflects"), onm);
+            } else {
+                pline("%s %s you.", upstart(onmbuf), vtense(onmbuf, "miss"));
+            }
         } else
             You("are almost hit by %s.", onm);
+
+        if (uarms && !rn2(3)) {
+            Your("%s %s %s.",
+                 uarms->oartifact ? xname(uarms)
+                                  : simple_typename(uarms->otyp),
+                 (rn2(2) ? "blocks" : "deflects"), onm);
+            use_skill(P_SHIELD, 1);
+        }
         return 0;
     } else {
         if (Blind || !flags.verbose)
@@ -375,10 +394,11 @@ struct monst *mtmp;
             && lined_up(mtmp))
             return &youmonst;  /* kludge - attack the player first if possible */
 
-        for (dir = 0; dir < 8; dir++)
+        for (dir = 0; dir < 8; dir++) {
             if (dirx[dir] == sgn(gx-mtmp->mx)
                 && diry[dir] == sgn(gy-mtmp->my))
                 break;
+        }
 
         if (dir == 8) {
             tbx = tby = 0;
@@ -409,7 +429,8 @@ struct monst *mtmp;
             x += dx;
             y += dy;
 
-            if (!isok(x, y) || !ZAP_POS(levl[x][y].typ) || closed_door(x, y))
+            if (!isok(x, y) || !ZAP_POS(levl[x][y].typ)
+                || closed_door(x, y))
                 break; /* off the map or otherwise bad */
 
             if (!conflicted
@@ -425,10 +446,11 @@ struct monst *mtmp;
                     && acceptable_pet_target(mtmp, mat, TRUE) && i > 0) {
                     if ((!oldmret)
                         || (mons[monsndx(mat->data)].difficulty >
-                            mons[monsndx(oldmret->data)].difficulty))
+                            mons[monsndx(oldmret->data)].difficulty)) {
                         mret = mat;
-                } else if ((mm_aggression(mtmp, mat) & ALLOW_M)
-                           || conflicted) {
+                        break;
+                    }
+                } else if (mm_aggression(mtmp, mat) || conflicted) {
                     if (mtmp->mtame && !conflicted
                         && !acceptable_pet_target(mtmp, mat, TRUE)) {
                         mret = oldmret;
@@ -438,12 +460,14 @@ struct monst *mtmp;
                     /* Can't make some pairs work together
                        if they hate each other on principle. */
                     if ((conflicted
-                        || (!(mtmp->mtame && mat->mtame) || !rn2(5)))
+                         || (!(mtmp->mtame && mat->mtame) || !rn2(5)))
                         && i > 0) {
                         if ((!oldmret)
                             || (mons[monsndx(mat->data)].difficulty >
-                                mons[monsndx(oldmret->data)].difficulty))
+                                mons[monsndx(oldmret->data)].difficulty)) {
                             mret = mat;
+                            break;
+                        }
                     }
                 }
 

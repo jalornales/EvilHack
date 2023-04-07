@@ -1,4 +1,4 @@
-/* NetHack 3.6	objnam.c	$NHDT-Date: 1583315888 2020/03/04 09:58:08 $  $NHDT-Branch: NetHack-3.7 $:$NHDT-Revision: 1.293 $ */
+/* NetHack 3.6	objnam.c	$NHDT-Date: 1674864732 2023/01/28 00:12:12 $  $NHDT-Branch: NetHack-3.6 $:$NHDT-Revision: 1.259 $ */
 /* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
 /*-Copyright (c) Robert Patrick Rankin, 2011. */
 /* NetHack may be freely redistributed.  See license for details. */
@@ -18,6 +18,7 @@ STATIC_DCL short FDECL(rnd_otyp_by_namedesc, (const char *, CHAR_P, int));
 STATIC_DCL boolean FDECL(wishymatch, (const char *, const char *, BOOLEAN_P));
 STATIC_DCL char *NDECL(nextobuf);
 STATIC_DCL void FDECL(releaseobuf, (char *));
+STATIC_DCL void FDECL(xcalled, (char *, int, const char *, const char *));
 STATIC_DCL char *FDECL(minimal_xname, (struct obj *));
 STATIC_DCL void FDECL(add_erosion_words, (struct obj *, char *));
 STATIC_DCL char *FDECL(doname_base, (struct obj *obj, unsigned));
@@ -27,6 +28,7 @@ STATIC_DCL boolean FDECL(singplur_lookup, (char *, char *, BOOLEAN_P,
 STATIC_DCL char *FDECL(singplur_compound, (char *));
 STATIC_DCL char *FDECL(xname_flags, (struct obj *, unsigned));
 STATIC_DCL boolean FDECL(badman, (const char *, BOOLEAN_P));
+STATIC_DCL boolean FDECL(not_spec_material, (const char * const, int));
 STATIC_DCL char *FDECL(globwt, (struct obj *, char *, boolean *));
 
 struct Jitem {
@@ -173,6 +175,7 @@ register int otyp;
 
     if (Role_if(PM_SAMURAI) && Japanese_item_name(otyp))
         actualn = Japanese_item_name(otyp);
+    buf[0] = '\0';
     switch (ocl->oc_class) {
     case COIN_CLASS:
         Strcpy(buf, "coin");
@@ -203,7 +206,7 @@ register int otyp;
         else
             Strcpy(buf, "amulet");
         if (un)
-            Sprintf(eos(buf), " called %s", un);
+            xcalled(buf, BUFSZ - (dn ? (int) strlen(dn) + 3 : 0), "", un);
         if (dn)
             Sprintf(eos(buf), " (%s)", dn);
         return buf;
@@ -212,8 +215,8 @@ register int otyp;
             Strcpy(buf, actualn);
             if (GemStone(otyp) && ocl->oc_class != ARMOR_CLASS)
                 Strcat(buf, " stone");
-            if (un)
-                Sprintf(eos(buf), " called %s", un);
+            if (un) /* 3: length of " (" + ")" which will enclose 'dn' */
+                xcalled(buf, BUFSZ - (dn ? (int) strlen(dn) + 3 : 0), "", un);
             if (dn)
                 Sprintf(eos(buf), " (%s)", dn);
         } else {
@@ -223,7 +226,7 @@ register int otyp;
                        (ocl->oc_material == MINERAL
                         || otyp == SLING_BULLET) ? " stone" : " gem");
             if (un)
-                Sprintf(eos(buf), " called %s", un);
+                xcalled(buf, BUFSZ, "", un);
         }
         return buf;
     }
@@ -234,8 +237,8 @@ register int otyp;
         else
             Sprintf(eos(buf), " of %s", actualn);
     }
-    if (un)
-        Sprintf(eos(buf), " called %s", un);
+    if (un) /* 3: length of " (" + ")" which will enclose 'dn' */
+        xcalled(buf, BUFSZ - (dn ? (int) strlen(dn) + 3 : 0), "", un);
     if (dn)
         Sprintf(eos(buf), " (%s)", dn);
     return buf;
@@ -569,6 +572,24 @@ boolean has_of;
     }
 }
 
+/* add "<pfx> called <sfx>" to end of buf, truncating if necessary */
+STATIC_OVL void
+xcalled(buf, siz, pfx, sfx)
+char *buf;       /* eos(obuf) or eos(&obuf[PREFIX]) */
+int siz;         /* BUFSZ or BUFSZ-PREFIX */
+const char *pfx; /* usually class string, sometimes more specific */
+const char *sfx; /* user assigned type name */
+{
+    int bufsiz = siz - 1 - (int) strlen(buf),
+        pfxlen = (int) (strlen(pfx) + sizeof " called " - sizeof "");
+
+    if (pfxlen > bufsiz)
+        panic("xcalled: not enough room for prefix (%d > %d)",
+              pfxlen, bufsiz);
+
+    Sprintf(eos(buf), "%s called %.*s", pfx, bufsiz - pfxlen, sfx);
+}
+
 char *
 xname(obj)
 struct obj *obj;
@@ -608,7 +629,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
     buf = nextobuf() + PREFIX; /* leave room for "17 -3 " */
     if (Role_if(PM_SAMURAI) && Japanese_item_name(typ))
         actualn = Japanese_item_name(typ);
-    /* As of 3.6.2: this used to be part of 'dn's initialization, but it
+    /* 3.6.2: this used to be part of 'dn's initialization, but it
        needs to come after possibly overriding 'actualn' */
     if (!dn)
         dn = actualn;
@@ -674,7 +695,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
         else if (nn && !is_soko_prize_flag(obj))
             Strcat(buf, actualn);
         else if (un && !is_soko_prize_flag(obj))
-            Sprintf(eos(buf), "amulet called %s", un);
+            xcalled(buf, BUFSZ - PREFIX, "amulet", un);
         else if (is_soko_prize_flag(obj))
             Strcpy(buf, "sokoban prize amulet");
         else
@@ -703,13 +724,11 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
             Strcat(buf, dn);
         else if (nn && !is_soko_prize_flag(obj))
             Strcat(buf, actualn);
-        else if (un && !is_soko_prize_flag(obj)) {
-            Strcat(buf, dn);
-            Strcat(buf, " called ");
-            Strcat(buf, un);
-        } else if (is_soko_prize_flag(obj)) {
+        else if (un && !is_soko_prize_flag(obj))
+            xcalled(buf, BUFSZ - PREFIX, dn, un);
+        else if (is_soko_prize_flag(obj))
             Strcpy(buf, "sokoban prize tool");
-        } else
+        else
             Strcat(buf, dn);
 
         propnames(buf, obj->oprops, obj->oprops_known,
@@ -882,8 +901,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
                 }
                 Strcat(buf, actualn);
             } else {
-                Strcat(buf, " called ");
-                Strcat(buf, un);
+                xcalled(buf, BUFSZ - PREFIX, "", un);
             }
         } else {
             Strcat(buf, dn);
@@ -898,8 +916,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
             Strcat(buf, " of ");
             Strcat(buf, actualn);
         } else if (un) {
-            Strcat(buf, " called ");
-            Strcat(buf, un);
+            xcalled(buf, BUFSZ - PREFIX, "", un);
         } else if (ocl->oc_magic) {
             Strcat(buf, " labeled ");
             Strcat(buf, dn);
@@ -914,7 +931,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
         else if (nn)
             Sprintf(eos(buf), "wand of %s", actualn);
         else if (un)
-            Sprintf(eos(buf), "wand called %s", un);
+            xcalled(buf, BUFSZ - PREFIX, "wand", un);
         else
             Sprintf(eos(buf), "%s wand", dn);
         break;
@@ -925,7 +942,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
             else if (nn)
                 Strcat(buf, actualn);
             else if (un)
-                Sprintf(eos(buf), "novel called %s", un);
+                xcalled(buf, BUFSZ - PREFIX, "novel", un);
             else
                 Sprintf(eos(buf), "%s book", dn);
             break;
@@ -937,7 +954,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
                 Strcat(buf, "spellbook of ");
             Strcat(buf, actualn);
         } else if (un) {
-            Sprintf(eos(buf), "spellbook called %s", un);
+            xcalled(buf, BUFSZ - PREFIX, "spellbook", un);
         } else
             Sprintf(eos(buf), "%s spellbook", dn);
         break;
@@ -947,7 +964,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
         else if (nn)
             Sprintf(eos(buf), "ring of %s", actualn);
         else if (un)
-            Sprintf(eos(buf), "ring called %s", un);
+            xcalled(buf, BUFSZ - PREFIX, "ring", un);
         else
             Sprintf(eos(buf), "%s ring", dn);
         break;
@@ -966,7 +983,7 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
             Strcpy(buf, rock);
         } else if (!nn) {
             if (un)
-                Sprintf(eos(buf), "%s called %s", rock, un);
+                xcalled(buf, BUFSZ - PREFIX, rock, un);
             else
                 Sprintf(eos(buf), "%s %s", dn, rock);
         } else {
@@ -1013,7 +1030,8 @@ unsigned cxn_flags; /* bitmask of CXN_xxx values */
     if (has_oname(obj) && dknown) {
         Strcat(buf, " named ");
  nameit:
-        Strcat(buf, ONAME(obj));
+        (void) strncat(buf, ONAME(obj),
+                       BUFSZ - 1 - PREFIX - (unsigned) strlen(buf));
     }
 
     if (!strncmpi(buf, "the ", 4))
@@ -1142,18 +1160,16 @@ add_erosion_words(obj, prefix)
 struct obj *obj;
 char *prefix;
 {
-    boolean iscrys = (obj->otyp == CRYSKNIFE);
-    boolean rknown;
+    boolean iscrys = (obj->otyp == CRYSKNIFE),
+            skip_eroded = (iscrys || !is_damageable(obj)),
+            rknown;
 
     rknown = (iflags.override_ID == 0) ? obj->rknown : TRUE;
-
-    /* if (!is_damageable(obj) && !(obj->material == GLASS) && !iscrys)
-        return; */
 
     /* The only cases where any of these bits do double duty are for
      * rotted food and diluted potions, which are all not is_damageable().
      */
-    if (obj->oeroded && !iscrys) {
+    if (obj->oeroded && !skip_eroded) {
         switch (obj->oeroded) {
         case 2:
             Strcat(prefix, "very ");
@@ -1165,7 +1181,7 @@ char *prefix;
         Strcat(prefix, is_rustprone(obj) ? "rusty " :
                obj->oclass == FOOD_CLASS ? "rotten " : "burnt ");
     }
-    if (obj->oeroded2 && !iscrys && obj->oclass != FOOD_CLASS) {
+    if (obj->oeroded2 && !skip_eroded && obj->oclass != FOOD_CLASS) {
         switch (obj->oeroded2) {
         case 2:
             Strcat(prefix, "very ");
@@ -1271,11 +1287,12 @@ unsigned doname_flags;
             Sprintf(prefix, "%ld ", obj->quan);
         else
             Strcpy(prefix, "some ");
-    } else if (obj->otyp == CORPSE || is_barding(obj)) {
+    } else if (obj->otyp == CORPSE) {
         /* skip article prefix for corpses [else corpse_xname()
-           would have to be taught how to strip it off again].
-           do the same for barding */
+           would have to be taught how to strip it off again] */
         *prefix = '\0';
+    } else if (is_barding(obj)) {
+        Strcpy(prefix, "some ");
     } else if (obj_is_pname(obj) || the_unique_obj(obj)) {
         if (!strncmpi(bp, "the ", 4))
             bp += 4;
@@ -2051,7 +2068,7 @@ const char *str;
         return strcpy(buf, "an []");
     }
     (void) just_an(buf, str);
-    return strcat(buf, str);
+    return strncat(buf, str, BUFSZ - 1 - (unsigned) strlen(buf));
 }
 
 char *
@@ -2119,9 +2136,7 @@ const char *str;
         Strcpy(buf, "the ");
     else
         buf[0] = '\0';
-    Strcat(buf, str);
-
-    return buf;
+    return strncat(buf, str, BUFSZ - 1 - (unsigned) strlen(buf));
 }
 
 char *
@@ -3399,6 +3414,69 @@ const char *str;
     return FALSE;
 }
 
+/* Return true if the input string appears to be specifying something that
+   happens to start with a material name and is not actually specifying a
+   material */
+STATIC_OVL boolean
+not_spec_material(str, material)
+const char * const str;
+int material;
+{
+    int i;
+    const char *matstr = materialnm[material];
+    int matlen = strlen(matstr);
+    /* is this the entire string? e.g. "gold" is actually a wish for zorkmids.
+       The effect of this is that you can't just wish for a material and get a
+       random item, made of that material, from the set of items that can be
+       made of that material, but this was never a feature anyway; it would give
+       a totally random object even if the material-object combo was invalid */
+    if (!strcmp(str, matstr)) {
+        return TRUE;
+    }
+    /* does it match some object? */
+    for (i = STRANGE_OBJECT + 1; i < NUM_OBJECTS; ++i) {
+        /* match in the object name e.g. "gold detection", "wax candle" */
+        const char *oc_name = OBJ_NAME(objects[i]),
+                   *oc_descr = OBJ_DESCR(objects[i]);
+        if (oc_name && !strncmpi(str, oc_name, strlen(oc_name))) {
+            return TRUE;
+        }
+        /* match in the object description, followed by object class name e.g.
+           "silver ring"
+           Note: this assumes that the only types of objects that can have
+           material strings as descriptions are not eligible to have object
+           materials vary on them. It also does not account for the fact that,
+           for instance, there being more wand descriptions than wands could
+           mean that "iron wand" doesn't actually exist in this game... */
+        if (oc_descr && !strcmp(matstr, oc_descr)) {
+            /* this is a bit complicated... the only 3 object classes that ought
+               to behave this way are rings, wands and spellbooks, all of which
+               have the singular object class string in def_oc_syms[].explain.
+               If e.g. "silver armor" was a real randomized armor description this
+               would break because the explain is "suit or piece of armor" */
+            const char *aftermat = str + matlen + 1; /* advance past material */
+            oc_descr = def_oc_syms[(int) objects[i].oc_class].explain;
+            if (!strncmpi(aftermat, oc_descr, strlen(oc_descr))) {
+                return TRUE;
+            }
+        }
+    }
+    /* does it match some artifact? e.g. "platinum yendorian express card" */
+    short otyp;
+    if (artifact_name(str, &otyp)) {
+        return TRUE;
+    }
+    /* does it match some terrain or a trap? e.g. "iron bars" */
+    for (i = 0; i < MAXPCHARS; ++i) {
+        const char *terr_name = defsyms[i].explanation;
+        if (terr_name && *terr_name
+            && !strncmpi(str, terr_name, strlen(terr_name))) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 /*
  * Return something wished for.  Specifying a null pointer for
  * the user request string results in a random object.  Otherwise,
@@ -3614,14 +3692,7 @@ struct obj *no_wish;
         } else {
             /* check for materials */
             if (!strncmpi(bp, "silver dragon", l = 13)
-                || !strncmpi(bp, "gold dragon", l = 11)
-                || !strcmp(bp, "gold")
-                || !strncmpi(bp, "gold piece", l = 10)
-                || !strncmpi(bp, "platinum yendorian express card", l = 31)
-                || !strncmpi(bp, "iron bars", l = 9)
-                || !strncmpi(bp, "crystal chest", l = 13)
-                || !strncmpi(bp, "crystal plate mail", l = 18)
-                || !strncmpi(bp, "iron ball of liberation", l = 23)) {
+                || !strncmpi(bp, "gold dragon", l = 11)) {
                 /* hack so that gold/silver dragon scales doesn't get
                  * interpreted as silver, or a wish for just "gold" doesn't get
                  * interpreted as gold */
@@ -3630,7 +3701,12 @@ struct obj *no_wish;
             /* doesn't currently catch "wood" for wooden */
             for (i = 1; i < NUM_MATERIAL_TYPES; i++) {
                 l = strlen(materialnm[i]);
-                if (l > 0 && !strncmpi(bp, materialnm[i], l))
+                if (l > 0 && !strncmpi(bp, materialnm[i], l)
+                    /* it LOOKS like a wish for a material...
+                       but need to ensure that it's not just a wish for
+                       something else that happens to have a prefix of a
+                       material */
+                    && !not_spec_material(bp, i))
                 {
                     material = i;
                     l++;
@@ -3711,10 +3787,12 @@ struct obj *no_wish;
      */
     if ((p = strstri(bp, " named ")) != 0) {
         *p = 0;
+        /* note: if 'name' is too long, oname() will truncate it */
         name = p + 7;
     }
     if ((p = strstri(bp, " called ")) != 0) {
         *p = 0;
+        /* note: if 'un' is too long, obj lookup just won't match anything */
         un = p + 8;
         /* "helmet called telepathy" is not "helmet" (a specific type)
          * "shield called reflection" is not "shield" (a general type)
@@ -5017,6 +5095,8 @@ struct obj *no_wish;
 
     /* set eroded and erodeproof */
     if (erosion_matters(otmp)) {
+        /* wished-for item shouldn't be eroded unless specified */
+        otmp->oeroded = otmp->oeroded2 = 0;
         if (eroded && (is_flammable(otmp) || is_rustprone(otmp)))
             otmp->oeroded = eroded;
         if (eroded2 && (is_corrodeable(otmp) || is_rottable(otmp)

@@ -89,7 +89,8 @@ amulet()
 #endif
     if ((((amu = uamul) != 0 && amu->otyp == AMULET_OF_YENDOR)
          || ((amu = uwep) != 0 && (amu->otyp == AMULET_OF_YENDOR
-                                   || (amu->oartifact == ART_IDOL_OF_MOLOCH && amu->spe))))
+                                   || (amu->oartifact == ART_IDOL_OF_MOLOCH
+                                       && u.uachieve.amulet))))
         && !rn2(15)) {
         for (ttmp = ftrap; ttmp; ttmp = ttmp->ntrap) {
             if (ttmp->ttyp == MAGIC_PORTAL) {
@@ -130,7 +131,8 @@ register struct monst *mtmp;
 
     for (otmp = mtmp->minvent; otmp; otmp = otmp->nobj)
         if (otmp->otyp == AMULET_OF_YENDOR
-            || (otmp->oartifact == ART_IDOL_OF_MOLOCH && otmp->spe))
+            || (otmp->oartifact == ART_IDOL_OF_MOLOCH
+                && u.uachieve.amulet))
             return 1;
     return 0;
 }
@@ -826,11 +828,9 @@ void
 intervene()
 {
     struct monst *mtmp = (struct monst *) 0;
-    int which = Is_astralevel(&u.uz) ? rnd(4) : rn2(9);
-    /* many cases don't apply on the Astral level or Planes.
-       with the introduction of Purgatory, the ascension run
-       has been shortened by quite a bit. the odds of Rodney
-       appearing have been increased */
+    int which = Is_astralevel(&u.uz) ? rnd(4) : rn2(8);
+
+    /* cases 0, and 5 through 7 don't apply on the Astral level */
     switch (which) {
     case 0:
         You_feel("apprehensive.");
@@ -850,10 +850,9 @@ intervene()
         (void) nasty((struct monst *) 0, FALSE);
         break;
     case 5:
-    case 6:
         resurrect();
         break;
-    case 7:
+    case 6:
         if (u.uevent.invoked) {
             pline_The("entire dungeon starts shaking around you!");
             do_earthquake((MAXULEV - 1) / 3 + 1);
@@ -866,7 +865,7 @@ intervene()
             awaken_monsters(ROWNO * COLNO);
         }
         break;
-    case 8:
+    case 7:
         (void) nasty((struct monst *) 0, TRUE);
         break;
     }
@@ -995,7 +994,7 @@ register struct monst *mtmp;
                     verbalize("Happy birthday, Ozzy!  You're a good boy, yes you are!!");
             } else {
                 verbalize("%s.",
-                        random_enchantress[rn2(SIZE(random_enchantress))]);
+                          random_enchantress[rn2(SIZE(random_enchantress))]);
             }
         } else {
             if (!rn2(7))
@@ -1005,8 +1004,17 @@ register struct monst *mtmp;
         verbalize("%s!",
                   random_vecna[rn2(SIZE(random_vecna))]);
     } else if (mtmp->isgking) {
-        verbalize("%s!",
-                  random_goblinking[rn2(SIZE(random_goblinking))]);
+        if (!rn2(3)) {
+            if (uwep && uwep->oartifact == ART_ORCRIST) {
+                verbalize("I know that sword!  It is the Goblin Cleaver!  The Biter!  The blade that sliced a thousand necks!");
+            } else if (uwep && uwep->oartifact == ART_GLAMDRING) {
+                verbalize("%s wields the Foe-Hammer!  The Beater!  Bright as daylight!",
+                          flags.female ? "She" : "He");
+            }
+        } else {
+            verbalize("%s!",
+                      random_goblinking[rn2(SIZE(random_goblinking))]);
+        }
     } else if (mtmp->data == &mons[PM_GOLLUM]) {
         verbalize("%s!",
                   random_gollum[rn2(SIZE(random_gollum))]);
@@ -1068,7 +1076,7 @@ register struct monst *mtmp;
 {
     if (Deaf)
         return;
-    if (mtmp->data == &mons[PM_ARCHANGEL]) {
+    if (mtmp->data == &mons[PM_SAINT_MICHAEL]) {
         if (Role_if(PM_INFIDEL))
             verbalize("%s",
                       random_arch_idol[rn2(SIZE(random_arch_idol))]);
